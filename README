@@ -1,1 +1,45 @@
-Разное полезные функции и классы
+<h2>Разное полезные функции и классы</h2>
+
+<h3>Модуль uAnsiStrings.pas</h3>
+<p>Класс TAnsiStringList - AnsiString копия TStringList</p>
+
+<h3>Модуль uTextReader.pas</h3>
+<p>Класс TTextReader - быстрое чтение текстовых файлов</p>
+
+<h3>Модуль uTextWriter.pas</h3>
+<p>Класс TTextWriter - быстрая запись текстовых файлов</p>
+
+<h3>Модуль uStopWatch.pas</h3>
+<p>Класс TStopWatch - секундомер</p>
+
+<h3>Модуль uRELog.pas|uRELog2.pas</h3>
+<p>Класс TReLog - вывод лога в RichEdit и файл</p>
+
+<h3>Модуль uRegExprFunc.pas</h3>
+<p>Функции для работы с регулярными выражениями</p>
+
+
+<h3>Модуль uMacros.pas</h3>
+<p>Простейшая ренерация текста макросами</p>
+
+
+<h3>Модуль uHeaderList.pas</h3>
+<p>Класс THeaderList - копия Indy TIdHeaderList для AnsiString</p>
+
+
+<h3>Модуль uGlobalFunctions.pas|uGlobalTypes.pas|uGlobalVars.pas</h3>
+<p>Глобальные типы,переменные и ф-ции</p>
+
+
+<h3>Модуль </h3>
+<p>Класс </p>
+
+<h3>Модуль </h3>
+<p>Класс </p>
+
+<h3>Модуль </h3>
+<p>Класс </p>
+
+<h3>Модуль </h3>
+<p>Класс </p>
+
