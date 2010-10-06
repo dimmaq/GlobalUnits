@@ -3,6 +3,15 @@
 <h3>Модуль uAnsiStrings.pas</h3>
 <p>Класс TAnsiStringList - AnsiString копия TStringList</p>
 
+<h3>uAnsiStringUtils</h3>
+<p>Функции преобразования Integer в AnsiString и наоборот</p>
+
+<h3>uEmlData</h3>
+<p>Класс разбора *.eml файла</p>
+
+<h3>uFakeAnsiStringList[ToFile|ToString]</h3>
+<p>запись текста в файл/строку через поддельный TStrings</p>
+
 <h3>Модуль uTextReader.pas</h3>
 <p>Класс TTextReader - быстрое чтение текстовых файлов</p>
 
@@ -20,7 +29,7 @@
 
 
 <h3>Модуль uMacros.pas</h3>
-<p>Простейшая ренерация текста макросами</p>
+<p>Постая ренерация текста макросами (типа %MACROS%)</p>
 
 
 <h3>Модуль uHeaderList.pas</h3>
@@ -28,14 +37,25 @@
 
 
 <h3>Модуль uGlobalFunctions.pas|uGlobalTypes.pas|uGlobalVars.pas</h3>
-<p>Глобальные типы,переменные и ф-ции</p>
+<p>разные глобальные типы,переменные и ф-ции</p>
 
+<h3>uGlobalSettings</h3>
+<p>класс для хранения глобальный настроек программы. Типы: int64, string, boolean, TStringList. Чтение\запись в *.ini или отдельный файл (только string и TStringList). Безопасный доступ из потоков (чтения+запись)</p>
 
-<h3>Модуль </h3>
-<p>Класс </p>
+<h3>uGlobalSettingsBinder</h3>
+<p>сзявает GlobalSettings с визуальнымикомпанентами</p>
 
-<h3>Модуль </h3>
-<p>Класс </p>
+<h3>ListRandomBase+uListRandomAStrings</h3>
+<p>ренерация случайного и неповторяющегося значения из списка (например TStrings)</p>
+
+<h3>uRegExprFunc</h3>
+<p>обёртка над TRegExpr</p>
+
+<h3>uSemaphore</h3>
+<p>Класс TSemaphore - простая обертка для семафоров Windows.CreateSemaphore()</p>
+
+<h3>uStringReader</h3>
+<p>чтение по строкам из string</p>
 
 <h3>Модуль </h3>
 <p>Класс </p>
