@@ -1,4 +1,4 @@
-unit uAnsiStrings;
+﻿unit uAnsiStrings;
 
 interface
 
@@ -7,15 +7,17 @@ uses
   Classes;
 
 type
-    TAnsiAnsiStrings = TAnsiStrings;
-    TAnsiAnsiStringList = TAnsiStringList;
-
-implementation
+    TAnsiStrings = TStrings;
+    TAnsiStringList = TStringList;
 
 {$ELSE UNICODE}
 
 uses
   Windows, SysUtils, Classes, AnsiStrings;
+
+type
+    TUnicodeStrings = TStrings;
+    TUnicodeStringList = TStringList;
 
 type
   TAnsiStrings = class;
@@ -77,6 +79,7 @@ type
     procedure PutObject(Index: Integer; AObject: TObject); virtual;
     procedure SetCapacity(NewCapacity: Integer); virtual;
     procedure SetTextStr(const Value: AnsiString); virtual;
+    procedure SetStrictTextStr(const Value: AnsiString); virtual;
     procedure SetUpdateState(Updating: Boolean); virtual;
     property UpdateCount: Integer read FUpdateCount;
     function CompareAnsiStrings(const S1, S2: AnsiString): Integer; virtual;
@@ -85,13 +88,14 @@ type
     function Add(const S: AnsiString): Integer; virtual;
     function AddObject(const S: AnsiString; AObject: TObject): Integer; virtual;
     procedure Append(const S: AnsiString);
-    procedure AddAnsiStrings(AnsiStrings: TAnsiStrings); virtual;
+    procedure AddStrings(Strings: TAnsiStrings); overload; virtual;
+    procedure AddStrings(Strings: TStrings); overload; virtual;
     procedure Assign(Source: TPersistent); override;
     procedure BeginUpdate;
     procedure Clear; virtual; abstract;
     procedure Delete(Index: Integer); virtual; abstract;
     procedure EndUpdate;
-    function Equals(AnsiStrings: TAnsiStrings): Boolean; reintroduce;
+    function Equals(Strings: TAnsiStrings): Boolean; reintroduce;
     procedure Exchange(Index1, Index2: Integer); virtual;
     function GetEnumerator: TAnsiStringsEnumerator;
     function GetText: PAnsiChar; virtual;
@@ -103,6 +107,7 @@ type
       AObject: TObject); virtual;
     procedure LoadFromFile(const FileName: string); overload; virtual;
     procedure LoadFromFile(const FileName: string; Encoding: TEncoding); overload; virtual;
+    procedure LoadFromFile(const FileName: string; ATestFileExists: Boolean); overload; virtual;
     procedure LoadFromStream(Stream: TStream); overload; virtual;
     procedure LoadFromStream(Stream: TStream; Encoding: TEncoding); overload; virtual;
     procedure Move(CurIndex, NewIndex: Integer); virtual;
@@ -111,6 +116,8 @@ type
     procedure SaveToStream(Stream: TStream); overload; virtual;
     procedure SaveToStream(Stream: TStream; Encoding: TEncoding); overload; virtual;
     procedure SetText(Text: PAnsiChar); virtual;
+    function GetRandom(const ADefault: AnsiString = ''): AnsiString;
+    function Mix: TAnsiStrings;
     property Capacity: Integer read GetCapacity write SetCapacity;
     property CommaText: AnsiString read GetCommaText write SetCommaText;
     property Count: Integer read GetCount;
@@ -124,8 +131,9 @@ type
     property ValueFromIndex[Index: Integer]: AnsiString read GetValueFromIndex write SetValueFromIndex;
     property NameValueSeparator: AnsiChar read GetNameValueSeparator write SetNameValueSeparator;
     property StrictDelimiter: Boolean read GetStrictDelimiter write SetStrictDelimiter;
-    property AnsiStrings[Index: Integer]: AnsiString read Get write Put; default;
+    property Strings[Index: Integer]: AnsiString read Get write Put; default;
     property Text: AnsiString read GetTextStr write SetTextStr;
+    property StrictText: AnsiString read GetTextStr write SetStrictTextStr;
   end;
 
 { TAnsiStringList class }
@@ -195,9 +203,94 @@ type
     property OwnsObjects: Boolean read FOwnsObject write FOwnsObject;
   end;
 
+procedure StringsAddAnsiStrings(ASource: TAnsiStrings; ADestination: TStrings);
+procedure StringsAssignAnsiStrings(ASource: TAnsiStrings; ADestination: TStrings);
+procedure StringsStrictAdd(AStrings: TUnicodeStrings; const AText: UnicodeString); overload;
+
+{$ENDIF UNICODE}
+
+procedure StringsStrictAdd(AStrings: TAnsiStrings; const AText: AnsiString); {$IFDEF UNICODE} overload;{$ENDIF}
+
 implementation
 
-uses RTLConsts, SysConst, Types;
+uses RTLConsts, StrUtils, SysConst, Types, AcedStrings;
+
+const
+  CRLF = #13#10;
+
+procedure StringsStrictAdd(AStrings: TAnsiStrings; const AText: AnsiString);
+var L,N,K: Integer;
+begin
+  AStrings.BeginUpdate;
+  try
+    N := 1;
+    L := Length(AText);
+    repeat
+      K := G_PosStr(CRLF, AText, N);
+      if k>0 then
+        AStrings.Add(Copy(AText, N, K-N))
+             else
+        AStrings.Add(Copy(AText, N, MaxInt));
+      N := K + 2;
+    until (K=0) or (N>=L);
+  finally
+    AStrings.EndUpdate;
+  end;
+end;
+
+{$IFDEF UNICODE}
+
+procedure StringsStrictAdd(AStrings: TUnicodeStrings; const AText: UnicodeString); overload;
+var
+  L,N,K: Integer;
+  UCRLF: UnicodeString;
+begin
+  UCRLF := CRLF;
+  N := 1;
+  L := Length(AText);
+  AStrings.BeginUpdate;
+  try
+    repeat
+      K := StrUtils.PosEx(UCRLF, AText, N);
+      if k>0 then
+        AStrings.Add(Copy(AText, N, K-N))
+             else
+        AStrings.Add(Copy(AText, N, MaxInt));
+      N := K + 2;
+    until (K=0) or (N>=L);
+  finally
+    AStrings.EndUpdate;
+  end;
+end;
+
+procedure StringsAddAnsiStrings(ASource: TAnsiStrings; ADestination: TStrings);
+var I: Integer;
+begin
+  ADestination.BeginUpdate;
+  try
+    for I := 0 to ASource.Count - 1 do
+      ADestination.AddObject(string(ASource[I]), ASource.Objects[I]);
+  finally
+    ADestination.EndUpdate;
+  end;
+end;
+
+procedure StringsAssignAnsiStrings(ASource: TAnsiStrings; ADestination: TStrings);
+begin
+  ADestination.BeginUpdate;
+  try
+    ADestination.Clear;
+//    ADestination.Defined := TAnsiStrings(Source).FDefined;
+    ADestination.NameValueSeparator := Char(ASource.NameValueSeparator);
+    ADestination.QuoteChar := Char(ASource.QuoteChar);
+    ADestination.Delimiter := Char(ASource.Delimiter);
+    ADestination.LineBreak := string(ASource.LineBreak);
+    ADestination.StrictDelimiter := ASource.StrictDelimiter;
+    StringsAddAnsiStrings(ASource, ADestination);
+  finally
+    ADestination.EndUpdate;
+  end;
+end;
 
 { TStringsEnumerator }
 
@@ -244,14 +337,25 @@ begin
   Add(S);
 end;
 
-procedure TAnsiStrings.AddAnsiStrings(AnsiStrings: TAnsiStrings);
-var
-  I: Integer;
+procedure TAnsiStrings.AddStrings(Strings: TAnsiStrings);
+var I: Integer;
 begin
   BeginUpdate;
   try
-    for I := 0 to AnsiStrings.Count - 1 do
-      AddObject(AnsiStrings[I], AnsiStrings.Objects[I]);
+    for I := 0 to Strings.Count - 1 do
+      AddObject(Strings[I], Strings.Objects[I]);
+  finally
+    EndUpdate;
+  end;
+end;
+
+procedure TAnsiStrings.AddStrings(Strings: TStrings);
+var I: Integer;
+begin
+  BeginUpdate;
+  try
+    for I := 0 to Strings.Count - 1 do
+      AddObject(AnsiString(Strings[I]), Strings.Objects[I]);
   finally
     EndUpdate;
   end;
@@ -270,7 +374,24 @@ begin
       FDelimiter := TAnsiStrings(Source).FDelimiter;
       FLineBreak := TAnsiStrings(Source).FLineBreak;
       FStrictDelimiter := TAnsiStrings(Source).FStrictDelimiter;
-      AddAnsiStrings(TAnsiStrings(Source));
+      AddStrings(TAnsiStrings(Source));
+    finally
+      EndUpdate;
+    end;
+    Exit;
+  end;
+  if Source is TStrings then
+  begin
+    BeginUpdate;
+    try
+      Clear;
+      // FDefined := TStrings(Source).FDefined;
+      FNameValueSeparator := AnsiChar(TStrings(Source).NameValueSeparator);
+      FQuoteChar := AnsiChar(TStrings(Source).QuoteChar);
+      FDelimiter := AnsiChar(TStrings(Source).Delimiter);
+      FLineBreak := AnsiString(TStrings(Source).LineBreak);
+      FStrictDelimiter := TStrings(Source).StrictDelimiter;
+      AddStrings(TStrings(Source));
     finally
       EndUpdate;
     end;
@@ -299,7 +420,7 @@ procedure TAnsiStrings.DefineProperties(Filer: TFiler);
   end;
 
 begin
-  Filer.DefineProperty('AnsiStrings', ReadData, WriteData, DoWrite);
+  Filer.DefineProperty('Strings', ReadData, WriteData, DoWrite);
 end;
 
 procedure TAnsiStrings.EndUpdate;
@@ -308,14 +429,14 @@ begin
   if FUpdateCount = 0 then SetUpdateState(False);
 end;
 
-function TAnsiStrings.Equals(AnsiStrings: TAnsiStrings): Boolean;
+function TAnsiStrings.Equals(Strings: TAnsiStrings): Boolean;
 var
   I, Count: Integer;
 begin
   Result := False;
   Count := GetCount;
-  if Count <> AnsiStrings.GetCount then Exit;
-  for I := 0 to Count - 1 do if Get(I) <> AnsiStrings.Get(I) then Exit;
+  if Count <> Strings.GetCount then Exit;
+  for I := 0 to Count - 1 do if Get(I) <> Strings.Get(I) then Exit;
   Result := True;
 end;
 
@@ -342,11 +463,11 @@ var
 begin
   BeginUpdate;
   try
-    TempAnsiString := AnsiStrings[Index1];
+    TempAnsiString := Strings[Index1];
     TempObject := Objects[Index1];
-    AnsiStrings[Index1] := AnsiStrings[Index2];
+    Strings[Index1] := Strings[Index2];
     Objects[Index1] := Objects[Index2];
-    AnsiStrings[Index2] := TempAnsiString;
+    Strings[Index2] := TempAnsiString;
     Objects[Index2] := TempObject;
   finally
     EndUpdate;
@@ -604,6 +725,43 @@ procedure TAnsiStrings.PutObject(Index: Integer; AObject: TObject);
 begin
 end;
 
+function TAnsiStrings.GetRandom(const ADefault: AnsiString): AnsiString;
+begin
+  if Count>0 then
+    Result := Strings[Random(Count)]
+  else
+    Result := ADefault
+end;
+
+function TAnsiStrings.Mix: TAnsiStrings;
+var
+  r,l,j: Integer;
+  s: AnsiString;
+  o: TObject;
+begin
+  BeginUpdate;
+  try
+    Randomize;
+    l := Count;
+    for j:=0 to (l-1) do
+    begin
+      r := Random(l);
+      //---
+      s := Strings[r];
+      o := Objects[r];
+      //---
+      Strings[r] := Strings[j];
+      Objects[r] := Objects[j];
+      //---
+      Strings[j] := s;
+      Objects[j] := o;
+    end
+  finally
+    EndUpdate;
+  end;
+  Result := Self;
+end;
+
 procedure TAnsiStrings.ReadData(Reader: TReader);
 begin
   Reader.ReadListBegin;
@@ -723,6 +881,11 @@ begin
   finally
     EndUpdate;
   end;
+end;
+
+procedure TAnsiStrings.SetStrictTextStr(const Value: AnsiString);
+begin
+  StringsStrictAdd(Self, Value);
 end;
 
 procedure TAnsiStrings.SetUpdateState(Updating: Boolean);
@@ -908,6 +1071,13 @@ begin
   end
   else
     if Index >= 0 then Delete(Index);
+end;
+
+procedure TAnsiStrings.LoadFromFile(const FileName: string;
+  ATestFileExists: Boolean);
+begin
+  if (not ATestFileExists) or FileExists(FileName) then
+    LoadFromFile(FileName);
 end;
 
 { TAnsiStringList }
