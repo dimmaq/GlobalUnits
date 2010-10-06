@@ -1,4 +1,4 @@
-<h2>Разное полезные функции и классы</h2>
+﻿<h2>Разное полезные функции и классы</h2>
 
 <h3>Модуль uAnsiStrings.pas</h3>
 <p>Класс TAnsiStringList - AnsiString копия TStringList</p>
