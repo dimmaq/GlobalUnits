@@ -1,140 +1,102 @@
-unit uGlobalFunctions;
+п»їunit uGlobalFunctions;
 
 // {$DEFINE USE_REGULAR_EXPRESSIONS}
 
 interface
 
 uses
-  Windows, SysUtils, Classes, RTLConsts
+  Windows, SysUtils, Classes, RTLConsts, Math,
+  ZLibExGZ, ZLibEx,
+  AcedContainers, AcedStrings, uAnsiStrings, AcedCommon,
+  uGlobalTypes, uGlobalConstants
   {$IFDEF UNICODE}
-    , AnsiStrings, Masks,
+    , AnsiStrings, Masks
   {$ENDIF}
-  AcedContainers, AcedStrings, ZLibExGZ, ZLibEx, uAnsiStrings, uGlobalTypes;
+  ;
 
-{$REGION 'Файловые ф-ции'}
-//************************
-// *** Файловые ф-ции ***
-//---
+
+function GetTimeStampStr: AnsiString;
 
 /// <summary>
-/// Загрузка файла в строку Ansi
-/// </summary>
-/// <param name="AFileName">имя файла</param>
-/// <param name="ATestFileExist">проверять наличие файла</param>
-/// <param name="ARaiseException">вызывать исключение в случае ошибки открытия/чтение файла</param>
-/// <param name="ADefault">возвращать строку в случае неудачи</param>
-/// <returns>содержимое файла в AnsiString</returns>
-function StringLoadFromFile(
-  const AFileName: string;
-  ATestFileExist: Boolean = False;
-  ARaiseException: Boolean = True;
-  const ADefault: AnsiString = ''
-): AnsiString;
-
-/// <summary>
-/// Сохранение строки в файл
-/// </summary>
-/// <param name="AFileName">имя файла</param>
-/// <param name="ABuffer">буфер данных</param>
-/// <param name="AAppend">добавлять данные в конец файла</param>
-/// <param name="ARaiseException">при ошибке вызывать исключение</param>
-procedure StringSaveToFile(
-  const AFileName: string;
-  const ABuffer: AnsiString;
-  AAppend: Boolean = False;
-  ARaiseException: Boolean = True
-);
-
-/// <summary>
-/// Загрузка файла в TStrings
-/// </summary>
-/// <param name="AFileName">имя файла</param>
-/// <param name="AStrings">куда загружать</param>
-/// <param name="ATestFileExist">проверять наличие файла</param>
-/// <param name="AAlwaysClear">очищать AStrings даже если файла нет</param>
-/// <param name="AReadByLine">читать файл по строкам TextReader'ом</param>
-/// <returns>возвращает AStrings</returns>
-function StringsLoadFromFile(
-  const AFileName: string;
-  AStrings: TAnsiStrings;
-  ATestFileExist: Boolean = False;
-  AAlwaysClear: Boolean = True;
-  AReadByLine: Boolean = False
-): TAnsiStrings;
-
-/// <summary>
-/// полный размер файла (>2ГБ)
-/// </summary>
-/// <param name="AFileName">Имя файла</param>
-/// <returns>размер файла</returns>
-function GetFileSize2(const AFileName: string): Int64;
-
-/// <summary>
-/// поиск файлов\директорий
-/// </summary>
-/// <param name="ADirName">где искать</param>
-/// <param name="AStrings">куда записывать найденное</param>
-/// <param name="AFindFile">искать файлы или директории</param>
-/// <param name="AFindMask">маска поиска</param>
-/// <param name="AIncFullPath">записывать в AStrings полный путь к файлу</param>
-/// <param name="ARecurs">рекурсивный поиск, т.е. включая поддиректории</param>
-/// <param name="AIncFilePath">при AIncFullPath=False и ARecurs=True записывать найденное с поддиректориями</param>
-/// <returns>кол-во найденный файлов\директорий</returns>
-function FindInDir(const ADirName: string; AStrings: TStrings;
-  AFindFile: Boolean = True; const AFindMask: string = '*';
-  AIncFullPath: Boolean = False; ARecurs: Boolean = False;
-  AIncFilePath: Boolean = False): Integer;
-//---
-{$ENDREGION}
-
-//---
-// *** Строковые ф-ции ***
-
-/// <summary>
-/// Возвращает случайную строку из TStrings
+/// Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃР»СѓС‡Р°Р№РЅСѓСЋ СЃС‚СЂРѕРєСѓ РёР· TStrings
 /// </summary>
 /// <param name="AStrings"></param>
-/// <param name="ADefault">возвращает ADefault если AStrings пустой</param>
-/// <returns>случайная строка из AStrings</returns>
+/// <param name="ADefault">РІРѕР·РІСЂР°С‰Р°РµС‚ ADefault РµСЃР»Рё AStrings РїСѓСЃС‚РѕР№</param>
+/// <returns>СЃР»СѓС‡Р°Р№РЅР°СЏ СЃС‚СЂРѕРєР° РёР· AStrings</returns>
 function StringsRandom(AStrings: TStrings;
-    const ADefault: string = ''): string;
+    const ADefault: string = ''): string; {$IFDEF UNICODE} overload;{$ENDIF}
+
+{$IFDEF UNICODE}
+function StringsRandom(AStrings: TAnsiStrings;
+  const ADefault: AnsiString = ''): AnsiString; overload;
+{$ENDIF}
 
 /// <summary>
-/// Перемешивает TStrings
-/// </summary>    
+/// РџРµСЂРµРјРµС€РёРІР°РµС‚ TStrings
+/// </summary>
 function RandomStrings(AStrings: TStrings): TStrings;
 
 /// <summary>
-/// Поиск первого символа из множества в строке  
+/// РџРѕРёСЃРє РїРµСЂРІРѕРіРѕ СЃРёРјРІРѕР»Р° РёР· РјРЅРѕР¶РµСЃС‚РІР° РІ СЃС‚СЂРѕРєРµ
 /// </summary>
-/// <param name="AChars">множество искомых символов</param>
-/// <param name="AStr">где искать</param>
-/// <param name="AStart">с кокого символа начинать поиск</param>
-/// <returns>индекс символа в строке</returns>
+/// <param name="AChars">РјРЅРѕР¶РµСЃС‚РІРѕ РёСЃРєРѕРјС‹С… СЃРёРјРІРѕР»РѕРІ</param>
+/// <param name="AStr">РіРґРµ РёСЃРєР°С‚СЊ</param>
+/// <param name="AStart">СЃ РєРѕРєРѕРіРѕ СЃРёРјРІРѕР»Р° РЅР°С‡РёРЅР°С‚СЊ РїРѕРёСЃРє</param>
+/// <returns>РёРЅРґРµРєСЃ СЃРёРјРІРѕР»Р° РІ СЃС‚СЂРѕРєРµ</returns>
 function CharsPos(const AChars: TSysCharSet; const AStr: AnsiString;
-  AStart: Integer = 1): Integer;
+  AStart: Integer = 1; AEnd: Integer = MaxInt): Integer;
+
+function CharsPosNot(const AChars: TSysCharSet; const AStr: AnsiString;
+  AStart: Integer = 1; AEnd: Integer = MaxInt): Integer;
+
+function CharsPosLeftNot(const AChars: TSysCharSet; const AStr: AnsiString;
+  AStart: Integer = MaxInt; AEnd: Integer = 1): Integer;
+
+function RandomChars(const AChars: AnsiString; ALength1: Integer = 1;
+  ALength2: Integer = -1): AnsiString;
 
 /// <summary>
-/// Экранирует спец. символы для JSON
+/// Р­РєСЂР°РЅРёСЂСѓРµС‚ СЃРїРµС†. СЃРёРјРІРѕР»С‹ РґР»СЏ JSON
 /// </summary>
-function JsonStringSafe(const AStr: AnsiString): AnsiString;
+function JsonStringSafe(const AStr: RawByteString): RawByteString;{$IFDEF UNICODE} overload;{$ENDIF}
+{$IFDEF UNICODE}
+function JsonStringSafe(const AStr: UnicodeString): UnicodeString; overload;
+{$ENDIF}
+
+
 //---
 
 //---
-// *** Разное ***
+// *** Р Р°Р·РЅРѕРµ ***
 function IfElse(B: Boolean; const IfTrue: AnsiString;
   const IfFalse: AnsiString = ''): AnsiString; overload; inline;
 {$IFDEF UNICODE}
 function IfElse(B: Boolean; const IfTrue: UnicodeString;
   const IfFalse: UnicodeString = ''): UnicodeString; overload; inline;
 {$ENDIF}
-function IfElse(B: Boolean; const IfTrue,IfFalse: Integer): Integer; overload; inline;
+function IfElse(B: Boolean; IfTrue,IfFalse: Integer): Integer; overload; inline;
+function IfElse(B: Boolean; IfTrue,IfFalse: Pointer): Pointer; overload; inline;
+function IfElse(B: Boolean; IfTrue,IfFalse: TObject): TObject; overload; inline;
+function IfElse(B: Boolean; IfTrue,IfFalse: AnsiChar): AnsiChar; overload; inline;
+{$IFDEF UNICODE}
+function IfElse(B: Boolean; IfTrue,IfFalse: Char): Char; overload; inline;
+{$ENDIF}
+
+
+/// <summary>
+/// Р•СЃР»Рё A РЅРµ РїСѓСЃС‚РѕРµ, РІРѕР·РІСЂР°С€Р°РµС‚ РµРіРѕ,
+///  РІ РїСЂРѕС‚РёРІРЅРѕРј СЃР»СѓС‡Р°Рµ РІРѕР·РІСЂР°С‰Р°РµС‚ B
+/// </summary>
+function IfEmpty(const A, B: AnsiString): AnsiString; inline;
 
 procedure GetMemoryInfo(AStrings: TStrings);
-Function IntToStr2(AInt,ALen: Integer): AnsiString;
-function BoolToStr2(B, AUseStr: Boolean): ShortString;
+function IntToBin(Value: LongWord): AnsiString;
+Function IntToStr2(AInt, ALen: Integer): string;
+Function IntToAnsiStr2(AInt, ALen: Integer): AnsiString;
+function BoolToStr2(const AValue: Boolean; const AUseStr: Boolean = False): ShortString;
 function Tick2Text(k: Int64): string;
-procedure ShowInformation(const AText: string);
+procedure ShowInformation(const AText: string;
+  const ACaption: string = 'Information');
 procedure ShowError(const AText: string);
 function GetTmpFileName(const APrefix: string = '';
   const APostfix: string = '';
@@ -150,15 +112,18 @@ function AddrGetPort(const AAddr: UnicodeString; ADefPort: UnicodeString): Unico
 {$ENDIF}
 //---
 function FileVersion(AFileName: string): string;
+function ExtractMailName(const AMail: AnsiString): AnsiString;
 function ExtractMailDomain(const AMail: AnsiString): AnsiString; {$IFDEF UNICODE}overload;{$ENDIF}
 {$IFDEF UNICODE}
 function ExtractMailDomain(const AMail: UnicodeString): UnicodeString; overload;
 {$ENDIF}
 function StrAppendWDelim(const AText, ANewText: AnsiString;
-  const ADelim: AnsiString = ';'): AnsiString; {$IFDEF UNICODE}overload;{$ENDIF}
+  const ADelim: AnsiString = ';'; const APrefix: AnsiString = '';
+  const APostfix: AnsiString = ''): AnsiString; {$IFDEF UNICODE}overload;{$ENDIF}
 {$IFDEF UNICODE}
 function StrAppendWDelim(const AText, ANewText: UnicodeString;
-  const ADelim: UnicodeString = ';'): UnicodeString; overload;
+  const ADelim: UnicodeString = ';'; const APrefix: UnicodeString = '';
+  const APostfix: UnicodeString = ''): UnicodeString; overload;
 {$ENDIF}
 
 {$IFDEF USE_REGULAR_EXPRESSIONS}
@@ -173,230 +138,34 @@ procedure HtmlTagsDelete(var AText: AnsiString);
 function HtmlTagsDelete2(const AText: AnsiString): AnsiString;
 function GZipEncode(var ABuffer: AnsiString): Boolean;
 
+function _ReplaceCRLF(const AText: string): string;
+function Err2Str(const E: Exception): string;
+
+// РєРѕРґРёСЂРѕРІР°РЅРёРµ СЃС‚СЂРѕРєРё РІ base64 Р±Р»РѕРєР°РјРё РїРѕ 57 СЃРёРјРІРѕР»РѕРІ (РЅР° РІС‹С…РѕРґРµ 56*4/3==76)
+function Base64Encode(const ASourceText: AnsiString): AnsiString;
+// С„РѕСЂРјР°С‚РёСЂРѕРІР°РЅРЅС‹Р№ base64 РІ С‚РµРєСЃС‚
+function Base64Decode(const ABase64Text: AnsiString): AnsiString;
+function QPEncode(const ASourceText: AnsiString): AnsiString;
+function QPDecode(const AQPText: AnsiString): AnsiString;
+
 implementation
 
 uses
+  SysConst,
   {$IFDEF USE_REGULAR_EXPRESSIONS}uRegExprFunc,{$ENDIF}
-  uGlobalVars,
-  uTextReader
+  uGlobalVars, uAnsiStringUtils
   ;
 
 var
   _iTmpFile : Integer = 1;
 
-
-{$REGION 'Файловые ф-ции'}
-
-function StringLoadFromFile(const AFileName: string;
-  ATestFileExist, ARaiseException: Boolean;
-  const ADefault: AnsiString): AnsiString;
-var
-  hFile: THandle;
-  sizeFile: Cardinal;
-  res: Int64;
-begin
-  Result := '';
-  if not ATestFileExist or FileExists(AFileName) then
-  begin
-    hFile := CreateFile(PChar(AFileName),GENERIC_READ,FILE_SHARE_READ,nil,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,0);
-    if hFile<>INVALID_HANDLE_VALUE then
-    begin
-      try
-        sizeFile := GetFileSize(hFile, nil);
-        if sizeFile=0 then
-          Exit; //***        
-        SetLength(Result, sizeFile);
-        res := FileRead(Integer(hFile), Pointer(Result)^, sizeFile);
-        if (res>-1) and (res=sizeFile) then
-          Exit //***
-        else
-          if ARaiseException then
-            raise EReadError.CreateRes(@SReadError);
-      finally
-        CloseHandle(hFile);
-      end
-    end
-    else
-    begin
-      if ARaiseException then
-        raise EFOpenError.CreateFmt(
-                SFOpenErrorEx,
-                [ExpandFileName(AFileName), SysErrorMessage(GetLastError)]
-              );
-    end;
-  end;
-  //---
-  Result := ADefault;
-end;
-
-procedure StringSaveToFile(const AFileName: string; const ABuffer: AnsiString;
-  AAppend, ARaiseException: Boolean);
-var
-  hFile: THandle;
-  openMethod: DWORD;
-begin
-  openMethod := IfElse(AAppend, OPEN_ALWAYS, CREATE_ALWAYS);
-  hFile := CreateFile(PChar(AFileName),GENERIC_WRITE,FILE_SHARE_READ,nil,openMethod,FILE_ATTRIBUTE_ARCHIVE,0);
-  if hFile<>INVALID_HANDLE_VALUE then
-  begin
-    try
-      if AAppend then
-        SetFilePointer(hFile, 0, nil, FILE_END);
-      if FileWrite(hFile, Pointer(ABuffer)^, Length(ABuffer))=-1 then
-        if ARaiseException then
-          raise EWriteError.CreateRes(@SWriteError);
-    finally
-      CloseHandle(hFile)
-    end
-  end
-  else
-  begin
-    if ARaiseException then
-      raise EFOpenError.CreateFmt(
-              SFOpenErrorEx,
-              [ExpandFileName(AFileName), SysErrorMessage(GetLastError())]
-            );
-  end;
-end;
-
-function StringsLoadFromFile(const AFileName: string; AStrings: TAnsiStrings;
-  ATestFileExist, AAlwaysClear, AReadByLine: Boolean): TAnsiStrings;
-var reader: uTextReader.TTextReader;
-begin
-  Result := AStrings;
-  if AAlwaysClear then
-    AStrings.Clear;
-  //---
-  if not ATestFileExist or FileExists(AFileName) then
-  begin
-    if AReadByLine then
-    begin
-      reader := uTextReader.TTextReader.Create(AFileName);
-      try
-        if not AAlwaysClear then
-          AStrings.Clear;
-        reader.ReadStrings(AStrings);
-      finally
-        reader.Free
-      end
-    end
-    else
-    begin
-      if not AAlwaysClear then
-        AStrings.Clear;
-      AStrings.LoadFromFile(AFileName);
-    end;
-  end
-end;
-
-function GetFileSize2(const AFileName: string): Int64;
-var
-  d : TWin32FindData;
-  h : hwnd;
-begin
-  Result := 0;
-  h := FindFirstFile(PChar(AFileName), d);
-  if (h<>INVALID_HANDLE_VALUE) then
-  begin
-    Result := d.nFileSizeLow or Int64(d.nFileSizeHigh) shl 32;
-    Windows.FindClose(h);
-  end;
-end;
-
-function _FindInDir(const ADirName, ASubDir: string; AStrings: TStrings;
-  AFindFile: Boolean; const AFindMask: string;
-  AIncFullPath, ARecurs, AIncFilePath: Boolean): Integer;
-var
-  ssr : TSearchRec;
-  {$IFDEF UNICODE}
-    MaskCheckObj: Masks.TMask;
-  {$ENDIF}
-
-  procedure _Add(const AStr: string);
-  begin
-    AStrings.Add(AStr);
-  end;
-
-  function _MatchesMask(const AFileName: string): Boolean;
-  begin
-    {$IFDEF UNICODE}
-    Result := MaskCheckObj.Matches(AFileName);
-    {$ELSE}
-    Result := G_ValidateWildText(AFileName, AFindMask);
-    {$ENDIF}
-  end;
-
-begin
-  Result := 0;
-  //---
-  {$IFDEF UNICODE}
-    MaskCheckObj := nil;
-  {$ENDIF}
-  //---
-  if FindFirst(ADirName+ASubDir+'*', faAnyFile, ssr)=0 then
-  try
-    {$IFDEF UNICODE}
-      MaskCheckObj := Masks.TMask.Create(AFindMask);
-    {$ENDIF}
-    //---
-    repeat
-      if (ssr.Name<>'..') and (ssr.Name<>'.') then
-      begin
-        if (AFindFile and ((ssr.Attr and faDirectory)=0)) or
-           ((not AFindFile) and (((ssr.Attr and faDirectory)<>0))) then
-        begin
-          if _MatchesMask(ssr.Name) then
-          begin
-            Inc(Result);
-            if Assigned(AStrings) then
-            begin
-              if AIncFullPath then
-                _Add(ADirName+ASubDir+ssr.Name)
-              else
-                if AIncFilePath then
-                  _Add(ASubDir+ssr.Name)
-                else
-                  _Add(ssr.Name)
-            end;
-          end;
-        end;
-        if ARecurs and ((ssr.Attr and faDirectory)<>0) then
-          Result := Result +
-            _FindInDir(ADirName, ASubDir+ssr.Name+'\', AStrings, AFindFile,
-              AFindMask, AIncFullPath, ARecurs, AIncFilePath)
-      end;
-    until FindNext(ssr)<>0;
-  finally
-    SysUtils.FindClose(ssr);
-    {$IFDEF UNICODE}
-      FreeAndNil(MaskCheckObj);
-    {$ENDIF}
-  end;
-end;
-function FindInDir(const ADirName: string; AStrings: TStrings;
-  AFindFile: Boolean; const AFindMask: string;
-  AIncFullPath, ARecurs, AIncFilePath: Boolean): Integer;
-begin
-  Result := _FindInDir(
-    SysUtils.IncludeTrailingPathDelimiter(ADirName),
-    '',
-    AStrings,
-    AFindFile,
-    IfElse(AFindMask='*.*','*',AFindMask),
-    AIncFullPath,
-    ARecurs,
-    AIncFilePath
-  );
-end;
-{$ENDREGION}
 //------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
+// *** РЎС‚СЂРѕРєРѕРІС‹Рµ С„-С†РёРё ***
 
-
-
-
-//------------------------------------------------------------------------------
-// *** Строковые ф-ции ***
+function GetTimeStampStr: AnsiString;
+begin
+  Result := FormatDateTime('yyyymmddhhnnsszzz', Now())
+end;
 
 function StringsRandom(AStrings: TStrings; const ADefault: string): string;
 begin
@@ -405,6 +174,13 @@ begin
   else
     Result := ADefault
 end;
+
+{$IFDEF UNICODE}
+function StringsRandom(AStrings: TAnsiStrings; const ADefault: AnsiString): AnsiString;
+begin
+  Result := AStrings.GetRandom(ADefault)
+end;
+{$ENDIF}
 
 function RandomStrings(AStrings:TStrings):TStrings;
 var
@@ -431,45 +207,142 @@ begin
 end;
 
 function CharsPos(const AChars: TSysCharSet; const AStr: AnsiString;
-  AStart: Integer): Integer;
-var j: Integer;
+  AStart, AEnd: Integer): Integer;
+var
+  j,m: Integer;
+  p: PAnsiChar;
 begin
-  Result := 0;
-  for j:=AStart to Length(AStr) do
+  if AStr<>'' then
   begin
-    if AStr[j] in AChars then
+    m := Min(Length(AStr),AEnd);
+    j := AStart;
+    p := @AStr[j];
+    while j<=m do
     begin
-      Result := j;
-      Exit;
+      if p^ in AChars then
+      begin
+        Result := j;
+        Exit;
+      end;
+      Inc(p);
+      Inc(j);
     end;
   end;
+  Result := 0;
 end;
 
-function JsonStringSafe(const AStr: AnsiString): AnsiString;
+function CharsPosNot(const AChars: TSysCharSet; const AStr: AnsiString;
+  AStart, AEnd: Integer): Integer;
+var
+  j,m: Integer;
+  p: PAnsiChar;
+begin
+  if AStr<>'' then
+  begin
+    m := Min(Length(AStr),AEnd);
+    j := AStart;
+    p := @AStr[j];
+    while j<=m do
+    begin
+      if not (p^ in AChars) then
+      begin
+        Result := j;
+        Exit;
+      end;
+      Inc(p);
+      Inc(j);
+    end;
+  end;
+  Result := 0;
+end;
+
+function CharsPosLeftNot(const AChars: TSysCharSet; const AStr: AnsiString;
+  AStart, AEnd: Integer): Integer;
+var
+  j,m: Integer;
+  p: PAnsiChar;
+begin
+  if (AStr<>'') and (0<=AStart) and (AStart<=Length(AStr)) then
+  begin
+    m := Max(1, AEnd);
+    j := AStart;
+    p := @AStr[j];
+    while j>=m do
+    begin
+      if not (p^ in AChars) then
+      begin
+        Result := j;
+        Exit;
+      end;
+      Dec(p);
+      Dec(j);
+    end;
+  end;
+  Result := 0;
+end;
+
+function RandomChars(const AChars: AnsiString; ALength1: Integer;
+  ALength2: Integer): AnsiString;
+var j,len:Integer;
+begin
+  if AChars='' then
+  begin
+    Result := '';
+    Exit;
+  end;
+  if ALength2=-1 then
+    len := ALength1
+  else
+    len := RandomRange(ALength1, ALength2+1);
+  SetLength(Result, len);
+  for j:=1 to len do
+    Result[j] := AChars[Random(Length(AChars))+1]
+end;
+
+function JsonStringSafe(const AStr: RawByteString): RawByteString;
 type
-  TUnsafeCharRec = record
+  TUnsafeJsonCharRec = record
     c: AnsiChar;
     s: string[2];
   end;
 const
-  unsafe_char: array[0..5] of TUnsafeCharRec = (
+  UnSafeJsonChar: array[0..5] of TUnsafeJsonCharRec = (
     (c:'\'; s:'\\'), (c:'"'; s:'\"'), (c:#9; s:'\t'),
     (c:#10; s:'\n'), (c:#12; s:'\f'), (c:#13; s:'\r')
   );
 var j: Integer;
 begin
   Result := AStr;
-  for j:=Low(unsafe_char) to High(unsafe_char) do
-    Result := G_ReplaceStr(Result, unsafe_char[j].c, unsafe_char[j].s);
+  for j:=Low(UnSafeJsonChar) to High(UnSafeJsonChar) do
+    Result := G_ReplaceStr(Result, UnSafeJsonChar[j].c, UnSafeJsonChar[j].s);
 end;
 
+{$IFDEF UNICODE}
+function JsonStringSafe(const AStr: UnicodeString): UnicodeString;
+type
+  TUnsafeJsonCharRec = record
+    c: Char;
+    s: UnicodeString;
+  end;
+const
+  UnSafeJsonChar: array[0..5] of TUnsafeJsonCharRec = (
+    (c:'\'; s:'\\'), (c:'"'; s:'\"'), (c:#9; s:'\t'),
+    (c:#10; s:'\n'), (c:#12; s:'\f'), (c:#13; s:'\r')
+  );
+var j: Integer;
+begin
+  Result := AStr;
+  for j:=Low(UnSafeJsonChar) to High(UnSafeJsonChar) do
+    Result := SysUtils.StringReplace(Result, UnSafeJsonChar[j].c, UnSafeJsonChar[j].s, [rfReplaceAll]);
+end;
+{$ENDIF}
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 
 
 
 //------------------------------------------------------------------------------
-// *** Разное ***
+// *** Р Р°Р·РЅРѕРµ ***
 
 function IfElse(B: Boolean; const IfTrue,IfFalse: AnsiString):AnsiString;
 begin
@@ -491,12 +364,54 @@ end;
 {$ENDIF}
 
 
-function IfElse(B: Boolean; const IfTrue,IfFalse: Integer):Integer;
+function IfElse(B: Boolean; IfTrue,IfFalse: Integer): Integer;
 begin
   if B then
     Result := IfTrue
   else
     Result := IfFalse
+end;
+
+function IfElse(B: Boolean; IfTrue,IfFalse: Pointer): Pointer;
+begin
+  if B then
+    Result := IfTrue
+  else
+    Result := IfFalse
+end;
+
+function IfElse(B: Boolean; IfTrue,IfFalse: TObject): TObject;
+begin
+  if B then
+    Result := IfTrue
+  else
+    Result := IfFalse
+end;
+
+function IfElse(B: Boolean; IfTrue,IfFalse: AnsiChar): AnsiChar;
+begin
+  if B then
+    Result := IfTrue
+  else
+    Result := IfFalse
+end;
+{$IFDEF UNICODE}
+function IfElse(B: Boolean; IfTrue,IfFalse: Char): Char;
+begin
+  if B then
+    Result := IfTrue
+  else
+    Result := IfFalse
+end;
+{$ENDIF}
+
+
+function IfEmpty(const A, B: AnsiString): AnsiString;
+begin
+  if A<>'' then
+    Result := A
+  else
+    Result := B
 end;
 
 procedure GetMemoryInfo(AStrings: TStrings);
@@ -586,23 +501,38 @@ begin
 
 end;
 
-Function IntToStr2(AInt,ALen: Integer): AnsiString;
+function IntToBin(Value: LongWord): AnsiString;
+var i: Integer;
+begin
+  SetLength(Result, 32);
+  for i := 1 to 32 do begin
+    if ((Value shl (i-1)) shr 31) = 0 then begin
+      Result[i] := '0'  {do not localize}
+    end else begin
+      Result[i] := '1'; {do not localize}
+    end;
+  end;
+end;
+
+Function IntToAnsiStr2(AInt, ALen: Integer): AnsiString;
 begin
   Result := {$IFDEF UNICODE}AnsiStrings.{$ENDIF}Format('%.*d', [ALen, AInt])
 end;
 
-{$IFDEF UNICODE}
-function IntToStr(X: Integer; Width: Integer = 0): AnsiString;
+Function IntToStr2(AInt, ALen: Integer): string;
 begin
-   Str(X: Width, Result);
+  Result := SysUtils.Format('%.*d', [ALen, AInt])
 end;
-{$ENDIF}
 
-function BoolToStr2(B, AUseStr: Boolean): ShortString;
+
+function BoolToStr2(const AValue: Boolean; const AUseStr: Boolean): ShortString;
 const
-  cBoolStrs: array[Boolean] of array[Boolean] of ShortString = (('0', '1'),('False', 'True'));
+  cBoolStrs: array[Boolean] of array[Boolean] of ShortString = (
+    ('0', '1'),
+    ('False', 'True')
+  );
 begin
-  Result := cBoolStrs[AUseStr][B];
+  Result := cBoolStrs[AUseStr][AValue];
 end;
 
 function Tick2Text(k: Int64): string;
@@ -616,10 +546,10 @@ begin
     s := l - h*3600 - m*60;
     Result := '';
     if h<>0 then
-      Result := SysUtils.IntToStr(h)+' час '+SysUtils.IntToStr(m)+' мин '
+      Result := SysUtils.IntToStr(h)+' С‡Р°СЃ '+SysUtils.IntToStr(m)+' РјРёРЅ '
     else if m<>0 then
-      Result := SysUtils.IntToStr(m)+' мин ';
-    Result := Result + SysUtils.IntToStr(s) + ' сек';
+      Result := SysUtils.IntToStr(m)+' РјРёРЅ ';
+    Result := Result + SysUtils.IntToStr(s) + ' СЃРµРє';
   end
   else
   begin
@@ -627,15 +557,14 @@ begin
   end;
 end;
 
-
-procedure ShowInformation(const AText: string);
+procedure ShowInformation(const AText, ACaption: string);
 begin
-  Windows.MessageBox(0, PChar(AText), 'Information', MB_OK or MB_ICONINFORMATION);
+  Windows.MessageBox(0, PChar(AText), PChar(ACaption), MB_OK or MB_ICONINFORMATION);
 end;
 
 procedure ShowError(const AText: string);
 begin
-  Windows.MessageBox(0, PChar(AText), 'Information', MB_OK or MB_ICONERROR);
+  Windows.MessageBox(0, PChar(AText), nil, MB_OK or MB_ICONERROR);
 end;
 
 function GetTmpFileName(const APrefix, APostfix, AExt: string): string;
@@ -643,7 +572,7 @@ begin
   Result := APrefix + SysUtils.IntToStr(InterlockedIncrement(_iTmpFile)) + APostfix + AExt
 end;
 
-// разбивка строки address:port
+// СЂР°Р·Р±РёРІРєР° СЃС‚СЂРѕРєРё address:port
 function AddrGetHost(const AAddr: AnsiString): AnsiString;
 var p:Integer;
 begin
@@ -658,7 +587,7 @@ var p:Integer;
 begin
   p := G_CharPos(':', AAddr);
   if p<>0 then
-    Result := StrToIntDef(string(Copy(AAddr, p+1, MaxInt)), ADefPort)
+    Result := AnsiStrToIntDef(Copy(AAddr, p+1, MaxInt), ADefPort)
   else
     Result := ADefPort;
 end;
@@ -683,11 +612,11 @@ begin
     Result := AAddr;
 end;
 function AddrGetPort(const AAddr: UnicodeString; ADefPort: Word): Integer;
-var p:Integer;
+var p: Integer;
 begin
   p := Pos(':', AAddr);
   if p<>0 then
-    Result := StrToIntDef(Copy(AAddr, p+1, MaxInt), ADefPort)
+    Result := SysUtils.StrToIntDef(Copy(AAddr, p+1, MaxInt), ADefPort)
   else
     Result := ADefPort;
 end;
@@ -750,6 +679,16 @@ begin
     Result := ''
 end;
 
+function ExtractMailName(const AMail: AnsiString): AnsiString;
+var p: Integer;
+begin
+  p := G_CharPos('@', AMail);
+  if p>0 then
+    Result := Copy(AMail, 1, p-1)
+  else
+    Result := AMail
+end;
+
 {$IFDEF UNICODE}
 function ExtractMailDomain(const AMail: UnicodeString): UnicodeString;
 var p:Integer;
@@ -762,23 +701,26 @@ begin
 end;
 {$ENDIF}
 
-function StrAppendWDelim(const AText, ANewText, ADelim: AnsiString): AnsiString;
+function StrAppendWDelim(const AText, ANewText, ADelim,
+  APrefix, APostfix: AnsiString): AnsiString;
 begin
-  if AText='' then
-    Result := ANewText
-  else if ANewText<>'' then
-    Result := AText + ADelim + ANewText
+  if ANewText<>'' then
+    if AText='' then
+      Result := APrefix + ANewText + APostfix
+    else
+      Result := AText + ADelim + APrefix + ANewText + APostfix
   else
     Result := AText
 end;
 
 {$IFDEF UNICODE}
-function StrAppendWDelim(const AText, ANewText, ADelim: UnicodeString): UnicodeString;
+function StrAppendWDelim(const AText, ANewText, ADelim,
+  APrefix, APostfix: UnicodeString): UnicodeString;
 begin
   if AText='' then
-    Result := ANewText
+    Result := APrefix + ANewText + APostfix
   else if ANewText<>'' then
-    Result := AText + ADelim + ANewText
+    Result := AText + ADelim + APrefix + ANewText + APostfix
   else
     Result := AText
 end;
@@ -1003,10 +945,10 @@ const
 
 var
   n,k,l,p : Integer;
-  z : AcedStrings.TStringBuilder;
+  z : TAnsiStringBuilder;
   tag: AnsiString;
 begin
-  z := AcedStrings.TStringBuilder.Create;
+  z := TAnsiStringBuilder.Create;
   try
     n := 1;
   //  k := Length(aStr);
@@ -1019,13 +961,13 @@ begin
         if l>0 then
           z.Append(Copy(AText, n, l));
         n := G_CharPos('>', AText, k) + 1;
-        if n=1 then // не найдено ">"
+        if n=1 then // РЅРµ РЅР°Р№РґРµРЅРѕ ">"
         begin
           z.Append(Copy(AText, k, MaxInt));
           Break;
         end
         else
-        begin // проверить имя тега
+        begin // РїСЂРѕРІРµСЂРёС‚СЊ РёРјСЏ С‚РµРіР°
           tag := Copy(AText, k+1, n-k-2);
           if tag<>'' then
           begin
@@ -1046,7 +988,7 @@ begin
         end
       end
         else
-      begin // не найдено "<"
+      begin // РЅРµ РЅР°Р№РґРµРЅРѕ "<"
         z.Append(Copy(AText, n, MaxInt));
         Break;
       end;
@@ -1085,8 +1027,270 @@ begin
   end;
 end;
 
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
 
+function _ReplaceCRLF(const AText: string): string;
+begin
+  Result := AText;
+  G_Compact(Result);
+end;
+
+function Err2Str(const E: Exception): string;
+begin
+  Result := E.ClassName + ' ' + _ReplaceCRLF(E.Message)
+end;
+
+
+
+// base64 mime
+// РєРѕРґРёСЂРѕРІР°РЅРёРµ СЃС‚СЂРѕРєРё РІ base64 Р±Р»РѕРєР°РјРё РїРѕ 57 СЃРёРјРІРѕР»РѕРІ
+function Base64Encode(const ASourceText: AnsiString): AnsiString;
+var
+  l,k,j,i : Integer;
+begin
+  l := Length(ASourceText);
+                         {  РєРѕР»-РІРѕ Р±СѓРєРІ * 4/3  }   {     РєРѕР»-РІРѕ СЃС‚СЂРѕРє * 2     }
+  SetString(Result, nil, (((l + 2) div 3) shl 2) + (((l+56) div 57) shl 1));
+  k := 1; j := 1;
+  while k<=l do
+  begin
+    i := Min(57,l-k+1);
+    IntBase64Encode(@ASourceText[k], @Result[j], i);
+    Inc(j, ((i+2) div 3) shl 2);
+    Result[j]   := #13;
+    Result[j+1] := #10;
+    Inc(j, 2);
+    Inc(k, 57);
+  end;
+
+end;
+
+function Base64Decode(const ABase64Text: AnsiString): AnsiString;
+var
+  L,N,K: Integer;
+  S: TAnsiStringBuilder;
+  z: AnsiString;
+begin
+  N := 1;
+  L := Length(ABase64Text);
+  S := TAnsiStringBuilder.Create((L div 4) * 3);
+  try
+    repeat
+      K := G_PosStr(CRLF, ABase64Text, N);
+      if k>0 then z := Copy(ABase64Text, N, K-N)
+             else z := Copy(ABase64Text, N, MaxInt);
+      S.Append(G_Base64Decode(z));
+      N := K + 2;
+    until (K=0) or (N>=L);
+    //---
+    Result := S.ToString();
+  finally
+    S.Free;
+  end;
+end;
+
+function _QP_Decode(oBuf, iBuf: PAnsiChar; len: Integer): Integer;
+const
+  CR = 13; LF = 10;
+
+const
+  xx = $7F;
+  QP_DTable: array[0..$FF] of Byte = (
+    xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx,
+    xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx,
+    xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx,
+    $0,$1,$2,$3, $4,$5,$6,$7, $8,$9,xx,xx, xx,xx,xx,xx,
+    xx,$A,$B,$C, $D,$E,$F,xx, xx,xx,xx,xx, xx,xx,xx,xx,
+    xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx,
+    xx,$A,$B,$C, $D,$E,$F,xx, xx,xx,xx,xx, xx,xx,xx,xx,
+    xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx,
+    xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx,
+    xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx,
+    xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx,
+    xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx,
+    xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx,
+    xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx,
+    xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx,
+    xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx, xx,xx,xx,xx
+);  
+
+  function isXdigit(x: Byte): Boolean;
+  begin
+    // RFC 1521: uppercase letters must be used when sending
+    // hex data, though a robust implementation may choose to
+    // recognize lowercase letters on receipt.
+    //
+    isXdigit := AnsiChar(x) in ['0'..'9','A'..'F','a'..'f']
+  end;
+
+VAR encoded: Boolean;
+    i, j: Integer;
+    c1, c2: Byte;
+    c: AnsiChar;
+
+begin
+  i := 0;
+  j := 0;
+
+  encoded := FALSE; // used to handle the last hex triplet
+  while i < len do
+  begin
+    c := iBuf[i];
+    if c = '=' then // found either a hex triplet: =HEx,
+    begin           // or a soft line break
+      if i < (len-2) then
+      begin
+        c1 := Byte(iBuf[i+1]);
+        c2 := Byte(iBuf[i+2]);
+
+        if isXdigit(c1) AND isXdigit(c2) then
+        begin
+          oBuf[j] := AnsiChar((QP_DTable[c1] SHL 4) OR QP_DTable[c2]);
+          Inc(i, 2);
+          Inc(j);
+        end
+        else if (c1 = CR) AND (c2 = LF) then  // soft break
+          Inc(i, 2);
+      end;
+      encoded := TRUE;
+    end
+    else begin
+      // MIME ignores trailing spaces and tab characters unless
+      // the line is terminated with a hex triplet: =09 or =20.
+      // Therefore, we check the encoded flag, and if it is false
+      // then we try to remove the trailing spaces.
+      //
+      if ((c = Chr(CR)) OR (c = Chr(LF))) AND NOT encoded then
+      begin
+        while (j > 0) AND (oBuf[j-1] in [#9, #32]) do Dec(j);
+      end;
+      oBuf[j] := c;
+      Inc(j);
+      encoded := FALSE;
+    end;
+    Inc(i);
+  end;
+  _QP_Decode := j
+end;
+
+function QPDecode(const AQPText: AnsiString): AnsiString;
+begin
+  SetLength(Result, Length(AQPText));
+  SetLength(Result, _QP_Decode(PAnsiChar(Result), PAnsiChar(AQPText), Length(AQPText)))
+end;
+
+function _Qp_Encode(outC, inBeg, inEnd: PAnsiChar): PAnsiChar;
+CONST cBasisHex: ARRAY [0..15] of AnsiChar =
+  ('0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F');
+
+CONST _CR = #13; _LF = #10;
+CONST cLineLen = 72;
+VAR itsLinePos: Integer;
+    itsPrevCh, c: AnsiChar;
+    lastSpace: PAnsiChar;
+begin
+  itsLinePos := 0;
+  itsPrevCh  := #0;
+
+  lastSpace := Nil;
+
+  while (inBeg <> inEnd) do
+  begin
+    c := inBeg^;
+
+    // line-breaks
+    if (c = _CR) OR (c = _LF) then
+    begin
+      if (itsPrevCh = ' ') {OR (itsPrevCh = #9)} then
+      begin
+        Dec(outC);
+        outC^ := '=';
+        Inc(outC);
+        outC^ := cBasisHex[Byte(itsPrevCh) SHR 4];
+        Inc(outC);
+        outC^ := cBasisHex[Byte(itsPrevCh) AND $0F];
+        Inc(outC);
+      end;
+      outC^ := c;
+      Inc(outC);
+      itsLinePos := 0;
+      itsPrevCh := c;
+      lastSpace := Nil;
+    end
+    else
+      if (c in [{#9, }#32..#60, #62..#126])
+         // Following line is to avoid single periods alone on lines,
+         // which messes up some dumb SMTP implementations, sigh...
+         AND NOT ((itsLinePos = 0) AND (c = '.')) then
+         begin
+            itsPrevCh := c;
+            outC^ := c;
+            Inc(outC);
+            Inc(itsLinePos);
+
+            if ((c = ' ') {OR (c = #9)}) AND (itsLinePos > cLineLen/2) then
+              lastSpace := outC;
+         end
+         else begin
+            outC^ := '=';
+            Inc(outC);
+            outC^ := cBasisHex[Byte(c) SHR 4];
+            Inc(outC);
+            outC^ := cBasisHex[Byte(c) AND $0F];
+            Inc(outC);
+            Inc(itsLinePos, 3);
+            itsPrevCh := 'A'; // close enough
+         end;
+
+    if (itsLinePos > cLineLen) then
+    begin
+
+      if lastSpace <> Nil then
+      begin
+        itsLinePos := outC - lastSpace;
+        Move(lastSpace^, (lastSpace+3)^, outC - lastSpace);
+        lastSpace^ := '=';
+        Inc(lastSpace);
+        lastSpace^ := _CR;
+        Inc(lastSpace);
+        lastSpace^ := _LF;
+        Inc(outC, 3);
+        lastSpace := Nil;
+      end
+      else begin
+        outC^ := '=';
+        Inc(outC);
+        outC^ := _CR;
+        Inc(outC);
+        outC^ := _LF;
+        Inc(outC);
+        itsPrevCh := _LF;
+        itsLinePos := 0;
+      end;
+    end;
+    Inc(inBeg);
+  end;
+
+  if (itsLinePos <> 0) then
+  begin
+    outC^ := '=';
+    Inc(outC);
+    outC^ := _CR;
+    Inc(outC);
+    outC^ := _LF;
+    Inc(outC);
+  end;
+
+  Result := outC;
+end;
+
+function QPEncode(const ASourceText: AnsiString): AnsiString;
+var x: PAnsiChar;
+begin
+  SetLength(Result, 3 * Length(ASourceText));
+  x  := _Qp_Encode(PAnsiChar(Result), PAnsiChar(ASourceText), PAnsiChar(ASourceText) + Length(ASourceText));
+  SetLength(Result, x - PChar(Result));
+end;
 
 end.
+
+
