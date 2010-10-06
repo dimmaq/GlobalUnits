@@ -1,12 +1,13 @@
-unit uTextReader;
+Ôªøunit uTextReader;
 
 interface
 
 uses
-  Classes, SysUtils, Math, AcedStrings, uAnsiStrings;
+  Classes, SysUtils, Math, AcedStrings, uAnsiStrings, uGlobalTypes,
+  uGlobalConstants;
 
 type
-  TTextReader = class
+  TAnsiStreamReader = class{$IFDEF UNICODE}(TTextReader){$ENDIF}
   private
     FStream: TStream;
     FStreamSize: Integer;
@@ -19,16 +20,28 @@ type
     FLastLine: AcedStrings.TStringBuilder;
     FBol1: Boolean;
     //---
-    procedure _ReadBuffer;
+    function _ReadLine: AnsiString; {$IFNDEF DEBUG}inline;{$ENDIF}
+    procedure _ReadBuffer; {$IFNDEF DEBUG}inline;{$ENDIF}
     procedure _NewBuffer(ABufSize: Integer);
   public
     constructor Create(AStream: TStream; AOwner: Boolean); overload;
-    constructor Create(const AFileName: string); overload;
+    constructor Create(const AFileName: TFileName); overload;
     destructor Destroy; override;
     //---
     function EOF: Boolean;
     function ReadLn: AnsiString;
-    function ReadStrings(AStrings: TAnsiStrings): Integer;
+    function ReadStrings(AStrings: TStrings): Integer; {$IFDEF UNICODE} overload;{$ENDIF}
+    {$IFDEF UNICODE}
+      function ReadStrings(AStrings: TAnsiStrings): Integer; overload;
+    {$ENDIF}
+    //---
+    procedure Close; {$IFDEF UNICODE} override;{$ENDIF}
+    function Peek: Integer; {$IFDEF UNICODE} override;{$ENDIF}
+    function Read: Integer; {$IFDEF UNICODE}override;{$ELSE}overload;{$ENDIF}
+    function Read(const Buffer: TCharArray; Index, Count: Integer): Integer; {$IFDEF UNICODE} override;{$ELSE}overload;{$ENDIF}
+    function ReadBlock(const Buffer: TCharArray; Index, Count: Integer): Integer; {$IFDEF UNICODE} override;{$ENDIF}
+    function ReadLine: string; {$IFDEF UNICODE} override;{$ENDIF}
+    function ReadToEnd: string; {$IFDEF UNICODE} override;{$ENDIF}
     //---
     property BufSize: Integer read FDefBufSize write FDefBufSize;
   end;
@@ -40,7 +53,7 @@ const
 
 { TTextReader }
 
-constructor TTextReader.Create(AStream: TStream; AOwner: Boolean);
+constructor TAnsiStreamReader.Create(AStream: TStream; AOwner: Boolean);
 begin
   FStream := AStream;
   FOwner := AOwner;
@@ -55,14 +68,14 @@ begin
   FBol1 := False;
 end;
 
-constructor TTextReader.Create(const AFileName: string);
+constructor TAnsiStreamReader.Create(const AFileName: TFileName);
 var stream: TStream;
 begin
   stream := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyWrite);
   Create(stream, True);
 end;
 
-destructor TTextReader.Destroy;
+destructor TAnsiStreamReader.Destroy;
 begin
   FreeMem(FBuffer);
   FreeAndNil(FLastLine);
@@ -71,13 +84,13 @@ begin
   inherited;
 end;
 
-function TTextReader.EOF: Boolean;
+function TAnsiStreamReader.EOF: Boolean;
 begin
   Result := (FBufferSize=0) or
             (((FStreamSize-FStreamPos)=0) and (FBufferPos>FBufferSize))
 end;
 
-function TTextReader.ReadLn: AnsiString;
+function TAnsiStreamReader._ReadLine: AnsiString;
 var
   P: PAnsiChar;
   S: PAnsiChar;
@@ -98,9 +111,9 @@ begin
       FBol1 := False;
     end;
     S := P;
-    // ÔÓËÒÍ ÍÓÌˆ‡ ÒÚÓÍË
+    // –ø–æ–∏—Å–∫ –∫–æ–Ω—Ü–∞ —Å—Ç—Ä–æ–∫–∏
     while not (P^ in [#0, #10, #13]) do Inc(P);
-    // ÍÓÌÂˆ ·ÛÙÂ‡
+    // –∫–æ–Ω–µ—Ü –±—É—Ñ–µ—Ä–∞
     if P^=#0 then
     begin
       if not Assigned(FLastLine) then
@@ -110,24 +123,37 @@ begin
       Inc(FBufferPos);
     end
     else
-    // ÍÓÌÂˆ ÒÚÓÍË
+    // –∫–æ–Ω–µ—Ü —Å—Ç—Ä–æ–∫–∏
     begin
       if (Assigned(FLastLine)) and (FLastLine.Length>0) then
         Result := FLastLine.Append(Pointer(S), P-S).ToString()
       else
         SetString(Result, S, P - S);
-      if P^ = #13 then
+      //---
+      // –ø–µ—Ä–µ–≤–æ–¥ —Å—Ç—Ä–æ–∫–∏ CRLF –∏–ª–∏ LFCR –∏–ª–∏ CR –∏–ª–∏ LF 
+      if P^ = CR then
       begin
         Inc(P);
         FBol1 := P^ = #0;
+        if P^ = LF then
+        begin
+          Inc(P);
+          FBol1 := False;
+        end;
       end
-      else if P^ = #10 then
+      else if P^ = LF then
       begin
         Inc(P);
         FBol1 := P^ = #0;
-      end
-      else if P^ = #0 then
+        if P^ = CR then
+        begin
+          Inc(P);
+          FBol1 := False;
+        end;
+      end;
+      if P^ = #0 then
         Inc(P);
+      //---
       FBufferPos := P - FBuffer;
       Exit; //***
     end
@@ -135,32 +161,29 @@ begin
   Result := FLastLine.ToString
 end;
 
-function TTextReader.ReadStrings(AStrings: TAnsiStrings): Integer;
 {$IFDEF UNICODE}
-var use_ansi: Boolean;
-{$ENDIF}
+function TAnsiStreamReader.ReadStrings(AStrings: TAnsiStrings): Integer;
 begin
   Result := 0;
-  //---
-  {$IFDEF UNICODE}
-    use_ansi := AStrings is TAnsiStringList;
-  {$ENDIF}
-  //---
   while not EOF do
   begin
-    {$IFDEF UNICODE}
-      if use_ansi then
-        TAnsiStringList(AStrings).Add(ReadLn)
-      else
-        AStrings.Add(ReadLn);
-    {$ELSE}
-      AStrings.Add(ReadLn);
-    {$ENDIF}
+    AStrings.Add(_ReadLine());
+    Inc(Result)
+  end;
+end;
+{$ENDIF}
+
+function TAnsiStreamReader.ReadStrings(AStrings: TStrings): Integer;
+begin
+  Result := 0;
+  while not EOF do
+  begin
+    AStrings.Add(ReadLine());
     Inc(Result)
   end;
 end;
 
-procedure TTextReader._NewBuffer(ABufSize: Integer);
+procedure TAnsiStreamReader._NewBuffer(ABufSize: Integer);
 var p: PAnsiChar;
 begin
   if FBuffer=nil then
@@ -170,7 +193,7 @@ begin
   PInteger(p)^ := 0;
 end;
 
-procedure TTextReader._ReadBuffer;
+procedure TAnsiStreamReader._ReadBuffer;
 var k: Integer;
 begin
   FBufferSize := Min(FDefBufSize, FStreamSize - FStreamPos);
@@ -184,5 +207,61 @@ begin
     _NewBuffer(FBufferSize)
   end
 end;
+
+procedure TAnsiStreamReader.Close;
+begin
+  //TODO: ???
+end;
+
+function TAnsiStreamReader.ReadToEnd: string;
+var S: {$IFDEF UNICODE}SysUtils.{$ENDIF}TStringBuilder;
+begin
+  S := {$IFDEF UNICODE}SysUtils.{$ENDIF}TStringBuilder.Create;
+  try
+    while not EOF() do
+      S.AppendLine(ReadLine());
+    //---
+    Result := S.ToString();
+  finally
+    S.Free
+  end;
+end;
+
+function TAnsiStreamReader.ReadLine: string;
+begin
+  Result := string(_ReadLine())
+end;
+
+function TAnsiStreamReader.ReadLn: AnsiString;
+begin
+  Result := _ReadLine();
+end;
+
+function TAnsiStreamReader.Peek: Integer;
+begin
+  //TODO: ???
+  Result := 0;
+end;
+
+function TAnsiStreamReader.Read: Integer;
+begin
+  //TODO: ???
+  Result := 0;
+end;
+
+function TAnsiStreamReader.Read(const Buffer: TCharArray; Index,
+  Count: Integer): Integer;
+begin
+  //TODO: ???
+  Result := 0;
+end;
+
+function TAnsiStreamReader.ReadBlock(const Buffer: TCharArray; Index,
+  Count: Integer): Integer;
+begin
+  //TODO: ???
+  Result := 0;
+end;
+
 
 end.

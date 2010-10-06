@@ -1,13 +1,11 @@
-unit uHeaderList;
+﻿unit uHeaderList;
+
+{$DEFINE USEINLINE}
 
 interface
 
 uses
-  Classes, uAnsiStrings
-  {$IFDEF UNICODE}
-    , AnsiStrings
-  {$ENDIF}
-  ;
+  Classes, uAnsiStrings;
 
 type
   THeaderList = class(TAnsiStringList)
@@ -77,17 +75,470 @@ type
 implementation
 
 uses
-  IdGlobal,
-  IdGlobalProtocols, SysUtils, AcedStrings;
+  SysUtils, AcedStrings, uGlobalFunctions
+  {$IFDEF UNICODE}
+    , AnsiStrings
+  {$ENDIF}
+//  ,IdGlobal, IdGlobalProtocols
+  ;
 
-{ TIdHeaderList }
+const
+  LF = #10;
+  CR = #13;
+  EOL = CR + LF;
+  TAB = #9;
+  CHAR32 = #32;
+  LWS = TAB + CHAR32;
+  LWS2 = [#9, #32];
+  token_specials = '()<>@,;:\"/[]?='; {do not localize}
+
+function CharPosInSet(const AString: AnsiString; const ACharPos: Integer;
+  const ASet: AnsiString): Integer; {$IFDEF USEINLINE}inline;{$ENDIF}
+var
+  LChar: AnsiChar;
+  I: Integer;
+begin
+  Result := 0;
+  if (0<ACharPos) and (ACharPos <= Length(AString)) then
+  begin
+    LChar := AString[ACharPos];
+    for I := 1 to Length(ASet) do
+    begin
+      if ASet[I] = LChar then
+      begin
+        Result := I;
+        Exit
+      end
+    end
+  end
+end;
+
+function CharIsInSet(const AString: AnsiString; const ACharPos: Integer;
+  const ASet: AnsiString): Boolean; {$IFDEF USEINLINE}inline;{$ENDIF}
+begin
+  Result := CharPosInSet(AString, ACharPos, ASet) > 0;
+end;
+
+function CharIsInSet2(const AString: AnsiString; const ACharPos: Integer;
+  const ASet: TSysCharSet): Boolean; {$IFDEF USEINLINE}inline;{$ENDIF}
+begin
+  if (0<ACharPos) and (ACharPos <= Length(AString)) then
+  begin
+    Result := AString[ACharPos] in ASet;
+  end
+  else
+  begin
+    Result := False;
+  end;
+end;
+
+function TextIsSame(const A1, A2: AnsiString): Boolean;
+{$IFDEF USEINLINE}inline;{$ENDIF}
+begin
+  {$IFDEF DOTNET}
+  Result := System.String.Compare(A1, A2, True) = 0;
+  {$ELSE}
+  Result := G_CompareText(A1, A2) = 0;
+  {$ENDIF}
+end;
+
+{This is taken from Borland's SysUtils and modified for our folding}    {Do not Localize}
+function IndyWrapText(const ALine, ABreakStr, ABreakChars : AnsiString;
+  MaxCol: Integer): AnsiString;
+const
+  QuoteChars = '"';    {Do not Localize}
+var
+  LCol, LPos: Integer;
+  LLinePos, LLineLen: Integer;
+  LBreakLen, LBreakPos: Integer;
+  LQuoteChar, LCurChar: AnsiChar;
+  LExistingBreak: Boolean;
+begin
+  LCol := 1;
+  LPos := 1;
+  LLinePos := 1;
+  LBreakPos := 0;
+  LQuoteChar := ' ';    {Do not Localize}
+  LExistingBreak := False;
+  LLineLen := Length(ALine);
+  LBreakLen := Length(ABreakStr);
+  Result := '';    {Do not Localize}
+  while LPos <= LLineLen do begin
+    LCurChar := ALine[LPos];
+    if IsLeadChar(LCurChar) then begin
+      Inc(LPos);
+      Inc(LCol);
+    end else begin //if CurChar in LeadBytes then
+      if LCurChar = ABreakStr[1] then begin
+        if LQuoteChar = ' ' then begin   {Do not Localize}
+          LExistingBreak := TextIsSame(ABreakStr, Copy(ALine, LPos, LBreakLen));
+          if LExistingBreak then begin
+            Inc(LPos, LBreakLen-1);
+            LBreakPos := LPos;
+          end; //if ExistingBreak then
+        end // if QuoteChar = ' ' then    {Do not Localize}
+      end else begin// if CurChar = BreakStr[1] then
+        if CharIsInSet(LCurChar, 1, ABreakChars) then begin
+          if LQuoteChar = ' ' then begin   {Do not Localize}
+            LBreakPos := LPos;
+          end;
+        end else begin // if CurChar in BreakChars then
+          if CharIsInSet(LCurChar, 1, QuoteChars) then begin
+            if LCurChar = LQuoteChar then begin
+              LQuoteChar := ' ';    {Do not Localize}
+            end else begin
+              if LQuoteChar = ' ' then begin   {Do not Localize}
+                LQuoteChar := LCurChar;
+              end;
+            end;
+          end;
+        end;
+      end;
+    end;
+    Inc(LPos);
+    Inc(LCol);
+    if not (CharIsInSet(LQuoteChar, 1, QuoteChars)) and
+       (LExistingBreak or
+      ((LCol > MaxCol) and (LBreakPos > LLinePos))) then begin
+      LCol := LPos - LBreakPos;
+      Result := Result + Copy(ALine, LLinePos, LBreakPos - LLinePos + 1);
+      if not (CharIsInSet(LCurChar, 1, QuoteChars)) then begin
+        while (LPos <= LLineLen) and (CharIsInSet(ALine, LPos, ABreakChars + #13+#10)) do begin
+          Inc(LPos);
+        end;
+        if not LExistingBreak and (LPos < LLineLen) then begin
+          Result := Result + ABreakStr;
+        end;
+      end;
+      Inc(LBreakPos);
+      LLinePos := LBreakPos;
+      LExistingBreak := False;
+    end; //if not
+  end; //while Pos <= LineLen do
+  Result := Result + Copy(ALine, LLinePos, MaxInt);
+end;
+
+const
+  IdFetchDelimDefault = ' ';    {Do not Localize}
+  IdFetchDeleteDefault = True;
+  IdFetchCaseSensitiveDefault = True;
+
+function FetchCaseInsensitive(var AInput: AnsiString;
+  const ADelim: AnsiString = IdFetchDelimDefault;
+  const ADelete: Boolean = IdFetchDeleteDefault): AnsiString;
+{$IFDEF USEINLINE}inline;{$ENDIF}
+var
+  LPos: Integer;
+begin
+  LPos := G_PosStr(ADelim, AInput);
+  if LPos = 0 then begin
+    Result := AInput;
+    if ADelete then begin
+      AInput := '';    {Do not Localize}
+    end;
+  end else begin
+    Result := Copy(AInput, 1, LPos - 1);
+    if ADelete then begin
+      //faster than Delete(AInput, 1, LPos + Length(ADelim) - 1); because the
+      //remaining part is larger than the deleted
+      AInput := Copy(AInput, LPos + Length(ADelim), MaxInt);
+    end;
+  end;
+end;
+
+function Fetch(var AInput: AnsiString; const ADelim: AnsiString = IdFetchDelimDefault;
+  const ADelete: Boolean = IdFetchDeleteDefault;
+  const ACaseSensitive: Boolean = IdFetchCaseSensitiveDefault): AnsiString;
+{$IFDEF USEINLINE}inline;{$ENDIF}
+var
+  LPos: Integer;
+begin
+  if ACaseSensitive then begin
+    LPos := G_PosStr(ADelim, AInput);
+    if LPos = 0 then begin
+      Result := AInput;
+      if ADelete then begin
+        AInput := '';    {Do not Localize}
+      end;
+    end
+    else begin
+      Result := Copy(AInput, 1, LPos - 1);
+      if ADelete then begin
+        //slower Delete(AInput, 1, LPos + Length(ADelim) - 1); because the
+        //remaining part is larger than the deleted
+        AInput := Copy(AInput, LPos + Length(ADelim), MaxInt);
+      end;
+    end;
+  end else begin
+    Result := FetchCaseInsensitive(AInput, ADelim, ADelete);
+  end;
+end;
+
+function TextStartsWith(const S, SubS: AnsiString): Boolean;
+var
+  LLen: Integer;
+//  P1, P2: PAnsiChar;
+begin
+  LLen := Length(SubS);
+  Result := LLen <= Length(S);
+  if Result then
+  begin
+    Result := G_CompareTextL(S, SubS, LLen) = 0
+  end;
+end;
+
+function IndyMax(const AValueOne, AValueTwo: Int64): Int64;
+{$IFDEF USEINLINE}inline;{$ENDIF} overload;
+begin
+  if AValueOne < AValueTwo then begin
+    Result := AValueTwo;
+  end else begin
+    Result := AValueOne;
+  end;
+end;
+
+function IndyMax(const AValueOne, AValueTwo: LongInt): LongInt;
+{$IFDEF USEINLINE}inline;{$ENDIF} overload;
+begin
+  if AValueOne < AValueTwo then begin
+    Result := AValueTwo;
+  end else begin
+    Result := AValueOne;
+  end;
+end;
+
+function IndyMax(const AValueOne, AValueTwo: Word): Word;
+{$IFDEF USEINLINE}inline;{$ENDIF} overload;
+begin
+  if AValueOne < AValueTwo then begin
+    Result := AValueTwo;
+  end else begin
+    Result := AValueOne;
+  end;
+end;
+
+function IndyMin(const AValueOne, AValueTwo: LongInt): LongInt;
+{$IFDEF USEINLINE}inline;{$ENDIF} overload;
+begin
+  if AValueOne > AValueTwo then begin
+    Result := AValueTwo;
+  end else begin
+    Result := AValueOne;
+  end;
+end;
+
+function IndyMin(const AValueOne, AValueTwo: Int64): Int64;
+{$IFDEF USEINLINE}inline;{$ENDIF} overload;
+begin
+  if AValueOne > AValueTwo then begin
+    Result := AValueTwo;
+  end else begin
+    Result := AValueOne;
+  end;
+end;
+
+function IndyMin(const AValueOne, AValueTwo: Word): Word;
+{$IFDEF USEINLINE}inline;{$ENDIF} overload;
+begin
+  if AValueOne > AValueTwo then begin
+    Result := AValueTwo;
+  end else begin
+    Result := AValueOne;
+  end;
+end;
+
+function IndyLength(const ABuffer: AnsiString; const ALength: Integer = -1; const AIndex: Integer = 1): Integer;
+{$IFDEF USEINLINE}inline;{$ENDIF}
+var
+  LAvailable: Integer;
+begin
+  Assert(AIndex >= 1);
+  LAvailable := IndyMax(Length(ABuffer)-AIndex+1, 0);
+  if ALength < 0 then begin
+    Result := LAvailable;
+  end else begin
+    Result := IndyMin(LAvailable, ALength);
+  end;
+end;
+
+function FindFirstOf(const AFind, AText: AnsiString;
+  const ALength: Integer = -1; const AStartPos: Integer = 1): Integer;
+var
+  I, LLength, LPos: Integer;
+begin
+  Result := 0;
+  if Length(AFind) > 0 then begin
+    LLength := IndyLength(AText, ALength, AStartPos);
+    if LLength > 0 then begin
+      for I := 0 to LLength-1 do begin
+        LPos := AStartPos + I;
+        if G_PosStr(AText[LPos], AFind) <> 0 then begin
+          Result := LPos;
+          Exit;
+        end;
+      end;
+    end;
+  end;
+end;
+
+procedure SplitHeaderSubItems(AHeaderLine: AnsiString; AItems: TAnsiStrings);
+var
+  LName, LValue: AnsiString;
+  I: Integer;
+
+  function FetchQuotedString(var VHeaderLine: AnsiString): AnsiString;
+  begin
+    Result := '';
+    Delete(VHeaderLine, 1, 1);
+    I := 1;
+    while I <= Length(VHeaderLine) do
+    begin
+      if VHeaderLine[I] = '\' then begin
+        if I < Length(VHeaderLine) then begin
+          Delete(VHeaderLine, I, 1);
+        end;
+      end
+      else if VHeaderLine[I] = '"' then begin
+        Result := Copy(VHeaderLine, 1, I-1);
+        VHeaderLine := Copy(VHeaderLine, I+1, MaxInt);
+        Break;
+      end;
+      Inc(I);
+    end;
+    Fetch(VHeaderLine, ';');
+  end;
+
+begin
+  Fetch(AHeaderLine, ';'); { do not localize}
+  while AHeaderLine <> '' do
+  begin
+    AHeaderLine := TrimLeft(AHeaderLine);
+    if AHeaderLine = '' then begin
+      Exit;
+    end;
+    LName := Trim(Fetch(AHeaderLine, '=')); {do not localize}
+    AHeaderLine := TrimLeft(AHeaderLine);
+    if TextStartsWith(AHeaderLine, '"') then {do not localize}
+    begin
+      LValue := FetchQuotedString(AHeaderLine);
+    end else
+    begin
+      I := FindFirstOf(' ' + token_specials, AHeaderLine);
+      if I <> 0 then
+      begin
+        LValue := Copy(AHeaderLine, 1, I-1);
+        if AHeaderLine[I] = ';' then begin {do not localize}
+          Inc(I);
+        end;
+        Delete(AHeaderLine, 1, I-1);
+      end else
+      begin
+        LValue := AHeaderLine;
+        AHeaderLine := '';
+      end;
+    end;
+    if (LName <> '') and (LValue <> '') then begin
+      AItems.Add(LName + '=' + LValue);
+    end;
+  end;
+end;
+
+function ExtractHeaderSubItem(const AHeaderLine, ASubItem: AnsiString): AnsiString;
+var
+  LItems: TAnsiStringList;
+  {$IFNDEF VCL6ORABOVE}
+  I: Integer;
+  LTmp: AnsiString;
+  {$ENDIF}
+begin
+  Result := '';
+  LItems := TAnsiStringList.Create;
+  try
+    SplitHeaderSubItems(AHeaderLine, LItems);
+    {$IFDEF VCL6ORABOVE}
+    LItems.CaseSensitive := False;
+    Result := LItems.Values[ASubItem];
+    {$ELSE}
+    for I := 0 to LItems.Count-1 do
+    begin
+      if TextIsSame(LItems.Names[I], ASubItem) then
+      begin
+        LTmp := LItems.Strings[I];
+        Result := Copy(LTmp, G_CharPos('=', LTmp)+1, MaxInt); {do not localize}
+        Break;
+      end;
+    end;
+    {$ENDIF}
+  finally
+    LItems.Free;
+  end;
+end;
+
+function ExtractHeaderItem(const AHeaderLine: AnsiString): AnsiString;
+var s: AnsiString;
+begin
+  // Store in s and not Result because of Fetch semantics
+  s := AHeaderLine;
+  Result := Trim(Fetch(s, ';')); {do not localize}
+end;
+
+function ReplaceHeaderSubItem(const AHeaderLine, ASubItem, AValue: AnsiString): AnsiString;
+var
+  LItems: TAnsiStringList;
+  I: Integer;
+  LTmp: AnsiString;
+
+  function QuoteString(const S: AnsiString): AnsiString;
+  var
+    I: Integer;
+    LQuotesNeeded: Boolean;
+  begin
+    Result := '';
+    LQuotesNeeded := False;
+    for I := 1 to Length(S) do begin
+      if CharIsInSet(S, I, token_specials) then begin
+        Result := Result + '\'; {do not localize}
+        LQuotesNeeded := True;
+      end;
+      Result := Result + S[I];
+    end;
+    if LQuotesNeeded then begin
+      Result := '"' + Result + '"';
+    end;
+  end;
+
+begin
+  Result := '';
+  LItems := TAnsiStringList.Create;
+  try
+    SplitHeaderSubItems(AHeaderLine, LItems);
+    LItems.CaseSensitive := False;
+    LItems.Values[ASubItem] := Trim(AValue);
+    Result := ExtractHeaderItem(AHeaderLine);
+    if Result <> '' then begin
+      for I := 0 to LItems.Count-1 do begin
+        LTmp := LItems.Strings[I];
+
+        Result := Result + '; ' + LItems.Names[I] + '=' + QuoteString(Copy(LTmp, {$IFDEF UNICODE}AnsiStrings.{$ENDIF}PosEx('=', LTmp)+1, MaxInt)); {do not localize}
+      end;
+    end;
+  finally
+    LItems.Free;
+  end;
+end;
+
+{ THeaderList }
 
 procedure THeaderList.AddStdValues(ASrc: TAnsiStrings);
 var
   i: integer;
 begin
   for i := 0 to ASrc.Count - 1 do begin
-    Add(StringReplace(ASrc[i], '=', NameValueSeparator, []));    {Do not Localize}
+    Add({$IFDEF UNICODE}AnsiStrings.{$ENDIF}StringReplace(ASrc[i], '=', NameValueSeparator, []));    {Do not Localize}
+
+
+
+
   end;
 end;
 
@@ -110,7 +561,7 @@ var
   i: LongInt;
 begin
   for i := 0 to Count - 1 do begin
-    ADest.Add(ReplaceOnlyFirst(Strings[i], NameValueSeparator, '='));    {Do not Localize}
+    ADest.Add(AnsiStrings.StringReplace(Strings[i], NameValueSeparator, '=', []));    {Do not Localize}
   end;
 end;
 
@@ -129,7 +580,7 @@ procedure THeaderList.DeleteFoldedLines(Index: Integer);
 begin
   Inc(Index);  {skip the current line}
   if Index < Count then begin
-    while (Index < Count) and CharIsInSet(Get(Index), 1, LWS) do begin {Do not Localize}
+    while (Index < Count) and  CharIsInSet2(Get(Index), 1, LWS2) do begin {Do not Localize}
       Delete(Index);
     end;
   end;
@@ -142,7 +593,8 @@ begin
   if Assigned(ADest) then begin
     for idx := 0 to Count - 1 do
     begin
-      if TextIsSame(AName, GetNameFromLine(idx)) then begin
+      if G_CompareText(AName, GetNameFromLine(idx))=0 then
+      begin
         ADest.Add(GetValueFromLine(idx));
       end;
     end;
@@ -174,7 +626,7 @@ function THeaderList.FoldLine(AString : AnsiString): TAnsiStrings;
 var
   s : AnsiString;
 begin
-  Result := TStringList.Create;
+  Result := TAnsiStringList.Create;
   try
     {we specify a space so that starts a folded line}
     s := IndyWrapText(AString, EOL+' ', LWS+',', FFoldLinesLength);    {Do not Localize}
@@ -192,7 +644,7 @@ var
   P: Integer;
 begin
   Result := Get(Index);
-  P := IndyPos(FNameValueSeparator, Result);
+  P := G_PosStr(FNameValueSeparator, Result);
   if P <> 0 then begin
     SetLength(Result, P - 1);
   end else begin
@@ -210,7 +662,7 @@ begin
 
   Message-ID:<asdf@fdfs
   }
-  P := IndyPos(TrimRight(FNameValueSeparator), Result);
+  P := G_PosStr(TrimRight(FNameValueSeparator), Result);
 
   Result := Copy(Result, 1, P - 1);
 end;
@@ -233,7 +685,7 @@ begin
     Message-ID:<asdf@fdfs
     }
     LSep := TrimRight(FNameValueSeparator);
-    P := IndyPos(LSep, LLine);
+    P := G_PosStr(LSep, LLine);
 
     Result := TrimLeft(Copy(LLine, P + Length(LSep), MaxInt));
     if FUnfoldLines then begin
@@ -244,7 +696,7 @@ begin
         end;
         LLine := Get(ALine);
         // s[1] is safe since header lines cannot be empty as that causes then end of the header block
-        if not CharIsInSet(LLine, 1, LWS) then begin
+        if not CharIsInSet2(LLine, 1, LWS2) then begin
           Break;
         end;
         Result := Trim(Result) + ' ' + Trim(LLine); {Do not Localize}

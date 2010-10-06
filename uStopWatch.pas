@@ -1,8 +1,9 @@
-unit uStopWatch;
+﻿unit uStopWatch;
 
 interface
 
-uses Windows, SysUtils, AcedConsts, uGlobalVars, uGlobalFunctions;
+uses
+  Windows, SysUtils, AcedConsts, uGlobalVars, uGlobalConstants, uGlobalFunctions;
 
 const
   StopWatchElapsedDefaultFormat = '%0:s %1:d ms';
@@ -27,6 +28,7 @@ type
     FCurThread: THandle;
     FRunning: Boolean;
     procedure _QueryPerformanceCounter(var AOut: Int64); inline;
+    function GetSum: Cardinal;
   public
     constructor Create;
     //---
@@ -40,9 +42,10 @@ type
     function StopWatch: Integer;
     function StopWatchStr: string;
     function Elapsed(const AFormat: string = StopWatchElapsedDefaultFormat;
-      const ADelimiter: string = CRLF): string;
+      const ADelimiter: string = CRLF; AShowSum: Boolean = False): string;
     //---
     property IsRunning: Boolean read FRunning;
+    property Sum: Cardinal read GetSum;
   end;
 
 implementation
@@ -120,7 +123,11 @@ end;
 
 function TStopWatch.StopWatch: Integer;
 begin
-  Result := Round(FTList[0].FT/FFR*1000);
+  if FCount=0 then
+    raise EStopWatchError.Create('First run Start()');
+  if FRunning then
+    Stop;
+  Result := Round(FTList[FCount-1].FT/FFR*1000);
 end;
 
 function TStopWatch.StopWatchStr: string;
@@ -128,21 +135,44 @@ begin
   Result := Format('%d ms', [StopWatch()])
 end;
 
-function TStopWatch.Elapsed(const AFormat, ADelimiter: string): string;
+function TStopWatch.Elapsed(const AFormat, ADelimiter: string;
+  AShowSum: Boolean): string;
 var
   j: Integer;
+  t: Cardinal;
+  k: Cardinal;
   f: string;
 begin
   if FRunning then
     Stop;
   Result := '';
+  k := 0;
   f := IfElse(AFormat='', StopWatchElapsedDefaultFormat, AFormat);
   for j:=0 to FCount-1 do
+  begin
+    t := Round(FTList[j].FT / FFR * 1000);
     Result := StrAppendWDelim(
                 Result,
-                Format(f, [FTList[j].FD,Round(FTList[j].FT/FFR*1000)]),
+                Format(f, [FTList[j].FD, t]),
                 ADelimiter
-              );    
+              );
+    if AShowSum then
+      Inc(k, t);
+  end;
+  if AShowSum then
+    Result := StrAppendWDelim(
+                Result,
+                Format(f, ['SUM', k]),
+                ADelimiter
+              );
+end;
+
+function TStopWatch.GetSum: Cardinal;
+var j: Integer;
+begin
+  Result := 0;
+  for j:=0 to FCount-1 do
+    Inc(Result, Round(FTList[j].FT / FFR * 1000));
 end;
 
 end.

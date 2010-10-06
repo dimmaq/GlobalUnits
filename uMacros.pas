@@ -1,541 +1,1002 @@
-unit uMacros;
+﻿unit uMacros;
 
-{$DEFINE USE_BUILT_MACROS}
-
-{
-Using:
-ApplyMacros('Random seven num %RND_NUM[7]%.') -> 'Random seven num  0914367.'
-ApplyMacros('Random 1 or 2 or 3 num - "%RND_NUM[1-3]%"') -> 'Random 1 or 2 or 3 num - "21"'
-
-Options:
-RND_CHAR[]
-RND_NUM[]
-RND_CHARNUM[]
-RND_LOWCHAR[]
-RND_HIGHCHAR[]
-
-}
+//TODO: запись промежеточных значений в буфер
+//todo: использовать tstringbuilder
+//DONE:  генерация FMacroNames один раз
+//TODO: подключение модулейв initialization (а надо ли?)
 
 interface
 
-uses Classes, Math, SysUtils, AcedStrings, AcedContainers;
+uses
+  // родные
+  Classes, Math, SysUtils, SyncObjs, Types,
+  // мои
+  uAnsiStrings, uTwoStrList, uListRandomAStrings, uGlobalTypes,
+  // асед
+  AcedStrings, AcedContainers, AcedBinary;
 
-type
-  TMacroParam = class(TObject)
-  private
-    FLocalHost        : AnsiString;
-    FMessageID        : AnsiString;
-    FCID              : AnsiString;
-    FAccountDomain    : AnsiString;
-    FFromAddress      : AnsiString;
-    FRecipientAddress : AnsiString;
-    FCurEncode        : AnsiString;
-    FBoundary         : AnsiString;
-    FBoundary2        : AnsiString;
-    FDate             : AnsiString;
-    FHelo             : AnsiString;
-    //---
-  public
-    constructor Create;
-    //---
-    procedure Clear;
-    //---
-    property LocalHost        : AnsiString read FLocalHost        write FLocalHost       ;
-    property MessageID        : AnsiString read FMessageID        write FMessageID       ;
-    property CID              : AnsiString read FCID              write FCID             ;
-    property AccountDomain    : AnsiString read FAccountDomain    write FAccountDomain   ;
-    property FromAddress      : AnsiString read FFromAddress      write FFromAddress     ;
-    property RecipientAddress : AnsiString read FRecipientAddress write FRecipientAddress;
-    property CurEncode        : AnsiString read FCurEncode        write FCurEncode       ;
-    property Boundary         : AnsiString read FBoundary         write FBoundary        ;
-    property Boundary1        : AnsiString read FBoundary         write FBoundary        ;
-    property Boundary2        : AnsiString read FBoundary2        write FBoundary2       ;
-    property Date             : AnsiString read FDate             write FDate            ;
-    property Helo             : AnsiString read FHelo             write FHelo            ;
-  end;
+type  
+  EMacroError = class(Exception);
 
-  TMacroItem = class(TObject)
-  private
-    FMacroName : AnsiString;
-    FMacroData : TStringList;
-    function GetRandomData:AnsiString;
+  TMacroNames = TStringAssociationList;
+
+  TMacroModuleLocal = class;
+  TMacros = class;
+
+  TMacroModule = class abstract
+  strict private
+    FMacroNames: TMacroNames;
+    function FindName(const AName: AnsiString; out AId: Integer): Boolean;
+  protected
+    // дети должны! переопределить метод создания массива имен
+    // чтобы оспользовался только один экземпляр массива
+    //  для всех объектов
+    class function CreateOneMacroNames: TMacroNames; virtual; abstract;
+    class procedure FillOneMacroNames(A: TMacroNames); virtual;
+    class procedure DestroyOneMacroNames; virtual; abstract;
+    class procedure InitMacroNames;
+    // Добавляет записи из ASource в массив ADestination
+    class procedure AddNames(const ASource: array of TAStrIntRec;
+      const ADestination: TMacroNames); static;
+    //---
+    function ApplyNameMacro(ANameID: Integer; const AParam: AnsiString;
+      out AOut: AnsiString): Boolean; virtual;
+    function ApplyMacro(const AName, AParam: AnsiString;
+      out AOut: AnsiString): Boolean; virtual;
   public
-    constructor Create(const AMacroName,AMacroFile:AnsiString);
+    constructor Create(const AOwner: TMacros);
     destructor Destroy; override;
     //---
-    property MacroName:AnsiString read FMacroName write FMacroName;
-    property MacroData:AnsiString read GetRandomData;
-    //property MacroData:TStringList read FMacroData write FMacroData;
+    procedure Clear; virtual;
   end;
 
-  TMacros = class(TObject)
-  private
-    FMacros: TStringAssociationList;
-    FLockObj: TMultiReadExclusiveWriteSynchronizer;
+  TSelectVar = TStringAssociationList;
+
+  TMacroModuleLocal = class abstract(TMacroModule)
+  strict private
+    const
+      _SELECT2_N = 'SELECT2'; _SELECT2_I = 17;
+      _SETVAR_N  = 'SETVAR';  _SETVAR_I  = 18;
+      _SETVAR2_N = 'SETVAR2'; _SETVAR2_I = 19;
+  protected
+    FVarList: TTwoStrList;
+    FSelectTwoArray: TSelectVar;
     //---
-    function FindMacroData(const AMacroName: AnsiString;
-      var AOutString: AnsiString): Boolean;
+    class procedure FillOneMacroNames(A: TMacroNames); override;
     //---
-    function YesMacro(const aStr:AnsiString;var s,l:Integer; aStart:Integer=1):Boolean;
-    function ApplyMacros_(const AInString: AnsiString; AParam:TMacroParam; var AOut:AnsiString):Boolean;
+    function MacroSelect2(const AParam: AnsiString): AnsiString; virtual;
+    function MacroSetVar(const AParam: AnsiString): AnsiString; virtual;
+    //---
+    function ApplyNameMacro(ANameID: Integer; const AParam: AnsiString;
+      out AOut: AnsiString): Boolean; override;
+    function ApplyMacro(const AName, AParam: AnsiString;
+      out AOut: AnsiString): Boolean; override;
   public
     constructor Create;
     destructor Destroy; override;
     //---
-    procedure LoadMacros(const AMacroPath:AnsiString);
-    function ApplyMacros(const AText:AnsiString; AParam:TMacroParam=nil):AnsiString;
+    function FindVar(const AName: AnsiString;
+      out AValue: AnsiString): Boolean; overload;
+    function FindVar(const AName: AnsiString): AnsiString; overload;
+    procedure Clear; override;
   end;
 
-{$IFDEF USE_BUILT_MACROS}
-function ApplyMacros(const AText:AnsiString; AParam:TMacroParam=nil):AnsiString;
-procedure MacrosReload;
-{$ENDIF}
-
+  TMacros = class sealed(TObject)
+  private
+    FModLocal: TMacroModuleLocal;
+    FModList: TArrayList;
+    FModBase: TMacroModule;
+    //---
+    class procedure ParseMacro(const AText: AnsiString;
+      var AMacroName, AMacroParam: AnsiString); static;
+    class function YesMacroNew2(const AStr: AnsiString; out s,l: Integer;
+      AStart: Integer): Boolean; static;
+    //---
+    function _ApplyMacros(const AInString: AnsiString; ALocalMod: TMacroModuleLocal;
+      out AOut: AnsiString): Boolean;
+  public
+    constructor Create(const AMacrosDir: TFileName);
+    destructor Destroy; override;
+    //---
+    procedure AddModule(const A: TMacroModule);
+    function ApplyMacros(const AText: AnsiString;
+      ALocalMod: TMacroModuleLocal): AnsiString;
+    procedure ReLoadMacros(const AMacrosDir: TFileName = '');
+    //---
+    function _Dump: UTF8String;
+    //---
+  end;
+  
 implementation
 
-uses uGlobalFunctions, uGlobalVars, uRegExprFunc;
+uses uGlobalFunctions, uGlobalFileIOFunc, uGlobalConstants, uGlobalVars;
 
-{$IFDEF USE_BUILT_MACROS}
-var
-  BuiltMacros:TMacros;
-{$ENDIF}
-
-function CharsPosNot(const AChars:TSetOfChar; const AStr:AnsiString; AStart:Integer=1):Integer;
-var j:Integer;
-begin
-  Result := -1;
-  for j:=AStart to Length(AStr) do
-  begin
-    if not (AStr[j] in AChars) then
-    begin
-      Result := j;
-      Exit;
-    end;
+type
+  TMacroModuleLocalLocked = class sealed(TMacroModuleLocal)
+  strict private
+    FLock: TCriticalSection;
+    class var
+      MacroNamesLocalLocked: TMacroNames;
+  protected
+    class function CreateOneMacroNames: TMacroNames; override;
+    class procedure DestroyOneMacroNames; override;
+    //---
+    function MacroSelect2(const AParam: AnsiString): AnsiString; override;
+    function MacroSetVar(const AParam: AnsiString): AnsiString; override;
+  public
+    constructor Create;
+    destructor Destroy; override;
   end;
-end;
 
-function rnd_str(const AChars:AnsiString; ALength1:Integer=1; ALength2:Integer=-1):AnsiString;
-var j,len:Integer;
+  TMacroFileList = TStringAssociationList;
+
+  TMacroModuleBase = class sealed(TMacroModule)
+  strict private
+    const
+      _RND_CHAR_N      = 'RND_CHAR';       _RND_CHAR_I      = 11;
+      _RND_NUM_N       = 'RND_NUM';        _RND_NUM_I       = 12;
+      _RND_CHARNUM_N   = 'RND_CHARNUM';    _RND_CHARNUM_I   = 13;
+      _RND_LOWCHAR_N   = 'RND_LOWCHAR';    _RND_LOWCHAR_I   = 14;
+      _RND_HIGHCHAR_N  = 'RND_HIGHCHAR';   _RND_HIGHCHAR_I  = 15;
+      _SELECT_N        = 'SELECT';         _SELECT_I        = 16;
+      _TOLOWER_N       = 'TOLOWER';        _TOLOWER_I       = 51;
+      _TOUPPER_N       = 'TOUPPER';        _TOUPPER_I       = 52;
+      _NEWLINE_N       = 'NEWLINE';        _NEWLINE_I       = 53;
+      _TAB_N           = 'TAB';            _TAB_I           = 54;
+    class var
+      MacroNamesBase: TMacroNames;
+  private
+    FLock: TMREWSync;
+    FMacroFileList: TMacroFileList;
+    FMacroDir: TFileName;
+    function FindMacro(const AName: AnsiString;
+      var AOut: AnsiString): Boolean;
+    //---
+    class function MacroSelect0(const AParamStr: AnsiString; AStart: Integer;
+      var ANum: Integer): AnsiString; static;
+    class function MacroSelect1(const AParamStr: AnsiString): AnsiString; static;
+    class function MacroSelect2(const AParamStr: AnsiString;
+      const ASelect2Array: TSelectVar): AnsiString; static;
+    class function MacroRandomStr(const AChars, AParam: AnsiString): AnsiString; static;
+    class function MacroSetVar(const AParam: AnsiString;
+      const AArray: TTwoStrList): AnsiString; static;
+  protected
+    class function CreateOneMacroNames: TMacroNames; override;
+    class procedure FillOneMacroNames(A: TMacroNames); override;
+    class procedure DestroyOneMacroNames; override;
+    //---
+    function ApplyNameMacro(ANameID: Integer; const AParam: AnsiString;
+      out AOut: AnsiString): Boolean; override;
+    function ApplyMacro(const AName, AParam: AnsiString;
+      out AOut: AnsiString): Boolean; override;
+  public
+    constructor Create(const AOwner: TMacros; const AMacrosDir: TFileName);
+    destructor Destroy; override;
+    //---
+    procedure ReLoadMacros(const AMacrosDir: TFileName);
+    //---
+    property MacroDir: TFileName read FMacroDir;
+  end;
+
+
+const
+  cNotMacroChars = [#0..#255] - gCharsEng - gCharsNum -
+                     ['_','-','=','.','[',']',',','"','''','|',';',':',#32,#9];
+  cMacroNameFirstChar = gCharsEng + gCharsNum;
+  cMacroNameLastChar = gCharsEng + gCharsNum + [']'];
+
+
+procedure MyStuffString(var S: AnsiString; Index, Count: Integer;
+  const ASubStr: AnsiString);
+var
+  L,R,I,M,K: Integer;
+  tmp: AnsiString;
 begin
-  if AChars='' then
+  if ASubStr = '' then
   begin
-    Result := '';
+    Delete(S, Index, Count);
     Exit;
   end;
-  Randomize;
-  if ALength2=-1 then
-    len := ALength1
-  else
-    len := RandomRange(ALength1, ALength2+1);
-  SetLength(Result, len);
-  for j:=1 to len do
-    Result[j] := AChars[Random(Length(AChars))+1]
-end;
-
-function rnd_str2_1(const AText, AChars, ARegExpr:AnsiString):AnsiString;
-var
-  z : AnsiString;
-  l : Integer;
-begin
-  z := GetMatchByNom(AText, '^'+ARegExpr+'$', 1);
-  l := StrToInt(z);
-  Result := rnd_str(AChars, l)
-end;
-
-function rnd_str2_2(const AText, AChars, ARegExpr:AnsiString):AnsiString;
-var
-  z1,z2 : AnsiString;
-  l1,l2 : Integer;
-begin
-  z1 := GetMatchByNom(AText, '^'+ARegExpr+'$', 1);
-  l1 := StrToInt(z1);
-  z2 := GetMatchByNom(AText, '^'+ARegExpr+'$', 2);
-  l2 := StrToInt(z2);
-  Result := rnd_str(AChars, l1, l2)
-end;
-
-function rnd_select(const AText, ARegExpr:AnsiString):AnsiString;
-var
-  z1 : AnsiString;
-  sl : TStringList;
-begin
-  Result := '';
-  z1 := GetMatchByNom(AText, '^'+ARegExpr+'$', 1);
-  if z1<>'' then
+  if S = '' then
   begin
-    sl := TStringList.Create;
-    try
-      sl.Delimiter := ',';
-      sl.DelimitedText := z1;
-      Result := StringsRandom(sl);
-    finally
-      sl.Free
-    end;
+    S := ASubStr;
+    Exit;
   end;
+  M := Length(S); // исходная длинна
+  if Index<1 then
+    Index := 1;
+  // вставлять в конец
+  if Index>=M then
+  begin
+    S := S + ASubStr;
+    Exit;
+  end;
+  // если удалять не надо
+  if Count<1 then
+  begin
+    Insert(ASubStr, S, Index);
+    Exit;
+  end;
+  //---
+  L := System.Length(ASubStr);
+  // Count - сколько вырезается
+  if (Count > M) or ((Index + Count) > M) then
+    Count := M - Index + 1;
+  if Count >= M then
+  begin
+    S := ASubStr;
+    Exit;
+  end;     
+  // I - начало второго фрагмента (который переносить взад или всперед)
+  I := Index + Count;
+  // сколько надо перенести
+  R := M - I + 1;
+  // в какую сторону смещается и на сколько
+  K := L - Count;
+  // создать новую строку
+  SetLength(tmp, M + K);
+  // перенести первый фрагмент
+  if Index>1 then
+    G_CopyMem(Pointer(S), Pointer(tmp), Index - 1);
+  // буфер надо увеличить - длина нового фрагмента больше вырезаемого
+  if K > 0 then
+  begin
+    // перенести второй фрагмент, если надо
+    if R > 0 then
+      G_CopyMem(@S[I], @tmp[I + K], R)
+  end
+  // строка уменьшается
+  else if K < 0 then
+  begin
+    if R > 0 then    
+      G_CopyMem(@S[I], @tmp[I + K], R);
+  end;
+  // скопировать подстроку
+  G_CopyMem(Pointer(ASubStr), @tmp[Index], L);
+  //---
+  // усё
+  S := tmp;
 end;
 
+{ TMacroModule }
 
-{ TMacroParam }
-
-procedure TMacroParam.Clear;
+constructor TMacroModule.Create(const AOwner: TMacros);
 begin
-  FLocalHost        := '';
-  FMessageID        := '';
-  FCID              := '';
-  FAccountDomain    := '';
-  FFromAddress      := '';
-  FRecipientAddress := '';
-  FCurEncode        := '';
-  FBoundary         := '';
-  FBoundary2        := '';
-  FDate             := '';
-  FHelo             := 'localhost';
+  if Assigned(AOwner) then
+    AOwner.AddModule(Self);
+  //---
+  FMacroNames := CreateOneMacroNames();
 end;
 
-constructor TMacroParam.Create;
+destructor TMacroModule.Destroy;
 begin
-  Clear;
-end;
-
-{ TMacroItem }
-
-constructor TMacroItem.Create(const AMacroName, AMacroFile: AnsiString);
-begin
-  FMacroName := AMacroName;
-  G_StrToUpper(FMacroName);
-  FMacroData := TStringList.Create;
-  StringsLoadFromFile(AMacroFile, FMacroData, True);
-end;
-
-destructor TMacroItem.Destroy;
-begin
-  FMacroData.Free;
+  //---
   inherited;
 end;
 
-function TMacroItem.GetRandomData: AnsiString;
+class procedure TMacroModule.AddNames(const ASource: array of TAStrIntRec;
+  const ADestination: TMacroNames);
+var R: TStrIntRec;
 begin
-  Result := StringsRandom(FMacroData)
+  if Length(ASource)>0 then
+    for R in ASource do
+      ADestination.Add(R.S, Pointer(R.I))
 end;
 
-{ TMacros }
-
-function TMacros.ApplyMacros(const AText: AnsiString;
-  AParam: TMacroParam): AnsiString;
-const
-  MAX_RECURSION_COUNT = 32;
-var
-  k,s,l,n : Integer;
-  z : AnsiString;
+class procedure TMacroModule.InitMacroNames;
 begin
-  Result := AText;
-  if Length(AText)<4 then
-    Exit;
-  k := 0;
-  n := 1;
-  Randomize;
-  while YesMacro(Result, s, l, n) do
+  FillOneMacroNames(CreateOneMacroNames());
+end;
+
+procedure TMacroModule.Clear;
+begin
+  // empty
+end;
+
+class procedure TMacroModule.FillOneMacroNames(A: TMacroNames);
+begin
+  // пусто
+end;
+
+function TMacroModule.FindName(const AName: AnsiString;
+  out AId: Integer): Boolean;
+var k: Integer;
+begin
+  if Assigned(FMacroNames) then
   begin
-    if ApplyMacros_(Copy(Result,s+1,l-2), AParam, z) then
+    k := FMacroNames.IndexOf(AName);
+    if k<>-1 then
     begin
-      Delete(Result, s, l);
-      Insert(z, Result, s);
-      n := s;
-    end
-      else
-    begin
-      n := s + l - 1;
+      AId := Integer(FMacroNames.ValueList[k]) ;
+      Result := True;
+      Exit;
     end;
-    //---------------------------------
-    Inc(k);
-    if k>MAX_RECURSION_COUNT then
-      raise Exception.Create('Recursion in Macros');
+  end;
+  Result := False;
+end;
+
+function TMacroModule.ApplyNameMacro(ANameID: Integer; const AParam: AnsiString;
+  out AOut: AnsiString): Boolean;
+begin
+  Result := True;
+end;
+
+function TMacroModule.ApplyMacro(const AName, AParam: AnsiString;
+  out AOut: AnsiString): Boolean;
+var k: Integer;
+begin
+  if FindName(AName, k) then
+  begin
+    if not ApplyNameMacro(k, AParam, AOut) then
+      raise EMacroError.CreateFmt('Unknow macro %d %s[%s]', [k, AName, AParam]);
+    Result := True;
+    Exit;
+  end;
+  //---
+  Result := False;
+end;
+
+
+{ TMacroModuleLocal }
+
+constructor TMacroModuleLocal.Create;
+begin
+  inherited Create(nil);
+  //---
+  FSelectTwoArray := TSelectVar.Create(False);
+  //---
+  FVarList := TTwoStrList.Create(4);
+  FVarList.Sorted := True;
+  FVarList.CaseSensitive := False;
+  FVarList.Duplicates := dupIgnore;
+end;
+
+destructor TMacroModuleLocal.Destroy;
+begin
+  FreeAndNil(FSelectTwoArray);
+  FreeAndNil(FVarList);
+  //---
+  inherited;
+end;
+
+class procedure TMacroModuleLocal.FillOneMacroNames(A: TMacroNames);
+const
+  N: array[0..2] of TAStrIntRec = (
+    (S: _SELECT2_N; I: _SELECT2_I),
+    (S: _SETVAR_N;  I: _SETVAR_I),
+    (S: _SETVAR2_N;  I: _SETVAR2_I)
+  );
+begin
+  AddNames(N, A);
+  inherited FillOneMacroNames(A);
+end;
+
+function TMacroModuleLocal.FindVar(const AName: AnsiString): AnsiString;
+begin
+  if not FindVar(AName, Result) then
+    Result := '';  
+end;
+
+function TMacroModuleLocal.FindVar(const AName: AnsiString;
+  out AValue: AnsiString): Boolean;
+var k: Integer;
+begin
+  if (FVarList.Count > 0) and (AName <> '') then
+  begin
+    k := FVarList.IndexOf(AName);
+    if k<>-1 then
+    begin
+      AValue := FVarList.Items[k].FValue;
+      Result := True;
+      Exit;
+    end;
+  end;
+  Result := False;
+end;
+
+function TMacroModuleLocal.MacroSelect2(
+  const AParam: AnsiString): AnsiString;
+begin
+  Result := TMacroModuleBase.MacroSelect2(AParam, FSelectTwoArray)
+end;
+
+function TMacroModuleLocal.MacroSetVar(const AParam: AnsiString): AnsiString;
+begin
+  Result := TMacroModuleBase.MacroSetVar(AParam, FVarList)
+end;
+
+function TMacroModuleLocal.ApplyNameMacro(ANameID: Integer;
+  const AParam: AnsiString; out AOut: AnsiString): Boolean;
+begin
+  case ANameID of
+    _SELECT2_I:
+      AOut := MacroSelect2(AParam);
+    _SETVAR_I:
+      AOut := MacroSetVar(AParam);
+    _SETVAR2_I:
+      AOut := MacroSetVar(AParam);
+    else
+    begin
+      Result := False;
+      Exit;
+    end;
+  end;
+  Result := True;
+end;
+
+function TMacroModuleLocal.ApplyMacro(const AName, AParam: AnsiString;
+  out AOut: AnsiString): Boolean;
+begin
+  Result := inherited ApplyMacro(AName, AParam, AOut);
+  if Result then
+    Exit;
+  //---
+  Result := FindVar(AName, AOut);
+  if Result then
+    Exit;
+  //---
+  Result := False;
+end;
+
+procedure TMacroModuleLocal.Clear;
+begin
+  inherited;
+  FSelectTwoArray.Clear();
+  FVarList.Clear();
+end;
+
+
+
+{ TMacroModuleLocalLocked }
+
+constructor TMacroModuleLocalLocked.Create;
+begin
+  inherited Create();
+  FLock := TCriticalSection.Create;
+end;
+
+destructor TMacroModuleLocalLocked.Destroy;
+begin
+  FreeAndNil(FLock);
+  inherited;
+end;
+
+class function TMacroModuleLocalLocked.CreateOneMacroNames: TMacroNames;
+begin
+  if not Assigned(MacroNamesLocalLocked) then
+    MacroNamesLocalLocked := TMacroNames.Create(False);
+  Result := MacroNamesLocalLocked;
+end;
+
+class procedure TMacroModuleLocalLocked.DestroyOneMacroNames;
+begin
+  FreeAndNil(MacroNamesLocalLocked);
+end;
+
+function TMacroModuleLocalLocked.MacroSelect2(
+  const AParam: AnsiString): AnsiString;
+begin
+  FLock.Enter;
+  try
+    Result := inherited MacroSelect2(AParam);
+  finally
+    FLock.Leave;
   end;
 end;
 
-function TMacros.ApplyMacros_(const AInString: AnsiString; AParam: TMacroParam;
-  var AOut: AnsiString): Boolean;
-  
-const
-  ch_macro = ['A'..'Z','a'..'z','0'..'9','_','-','.','[',']',',','"',''''];
-
-  rnd_char = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-  rnd_num = '0123456789';
-  rnd_charnum = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-  rnd_lowchar = 'abcdefghijklmnopqrstuvwxyz';
-  rnd_highchar = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-
-const
-  RND_CHAR_      = 'RND_CHAR';
-  RND_NUM_       = 'RND_NUM';
-  RND_CHARNUM_   = 'RND_CHARNUM';
-  RND_LOWCHAR_   = 'RND_LOWCHAR';
-  RND_HIGHCHAR_  = 'RND_HIGHCHAR';
-
-  D_1 = '\[(\d+)\]';
-  D_2 = '\[(\d+)-(\d+)\]';
-
-  RND_CHAR_D_1     = RND_CHAR_     + D_1;
-  RND_NUM_D_1      = RND_NUM_      + D_1;
-  RND_CHARNUM_D_1  = RND_CHARNUM_  + D_1;
-  RND_LOWCHAR_D_1  = RND_LOWCHAR_  + D_1;
-  RND_HIGHCHAR_D_1 = RND_HIGHCHAR_ + D_1;
-
-  RND_CHAR_D_2     = RND_CHAR_     + D_2;
-  RND_NUM_D_2      = RND_NUM_      + D_2;
-  RND_CHARNUM_D_2  = RND_CHARNUM_  + D_2;
-  RND_LOWCHAR_D_2  = RND_LOWCHAR_  + D_2;
-  RND_HIGHCHAR_D_2 = RND_HIGHCHAR_ + D_2;
-
-  LOCALHOSTNAME_ = 'LOCALHOSTNAME';
-  ACCOUNTDOMAIN_ = 'ACCOUNTDOMAIN';
-  RECIPIENT_     = 'RECIPIENT';
-  SENDER_        = 'SENDER';
-  ENCODE_        = 'ENCODE';
-  MSGID_         = 'MSGID';
-  CID_           = 'CID';
-  BOUNDARY_      = 'BOUNDARY';
-  BOUNDARY1_     = 'BOUNDARY1';
-  BOUNDARY2_     = 'BOUNDARY2';
-  DATE_          = 'DATE';
-  HELO_          = 'HELO';
-
-  SELECT_    = 'SELECT\[([^\[\]]+)\]';
-
+function TMacroModuleLocalLocked.MacroSetVar(
+  const AParam: AnsiString): AnsiString;
 begin
-  Result := True;
-  AOut   := '';
-//------------------------------------------------------------------------------
-// �������� �������
+  FLock.Enter;
+  try
+    Result := inherited MacroSetVar(AParam);
+  finally
+    FLock.Leave;
+  end;
+end;
 
-  if G_CompareText(AInString,RND_CHAR_)=0 then
-    AOut := rnd_str(rnd_char)
 
-  else if G_CompareText(AInString,RND_NUM_)=0 then
-    AOut := rnd_str(rnd_num)
 
-  else if G_CompareText(AInString,RND_CHARNUM_)=0 then
-    AOut := rnd_str(rnd_charnum)
+{ TMacroModuleBase }
 
-  else if G_CompareText(AInString,RND_LOWCHAR_)=0 then
-    AOut := rnd_str(rnd_lowchar)
+constructor TMacroModuleBase.Create(const AOwner: TMacros; const AMacrosDir: TFileName);
+begin
+  inherited Create(AOwner);
+  FLock := TMREWSync.Create;
+  FMacroFileList := TMacroFileList.Create(False);
+  FMacroFileList.OwnValues := True;
+  ReLoadMacros(AMacrosDir);
+end;
 
-  else if G_CompareText(AInString,RND_HIGHCHAR_)=0 then
-    AOut := rnd_str(rnd_highchar)
+destructor TMacroModuleBase.Destroy;
+begin
+  FreeAndNil(FMacroFileList);
+  FreeAndNil(FLock);
+  inherited;
+end;
 
-  {Todo: ��������������}
-  //-----------------------------
-  else if YesRegExpr(AInString, RND_CHAR_D_1)  then
-    AOut := rnd_str2_1(AInString, rnd_char, RND_CHAR_D_1)
+class function TMacroModuleBase.CreateOneMacroNames: TMacroNames;
+begin
+  if not Assigned(MacroNamesBase) then
+    MacroNamesBase := TMacroNames.Create(False);
+  Result := MacroNamesBase;
+end;
 
-  else if YesRegExpr(AInString, RND_NUM_D_1)  then
-    AOut := rnd_str2_1(AInString, rnd_num, RND_NUM_D_1)
+class procedure TMacroModuleBase.FillOneMacroNames(A: TMacroNames);
+const
+  N: array[0..9] of TAStrIntRec = (
+    (S: _RND_CHAR_N;     I: _RND_CHAR_I),
+    (S: _RND_NUM_N;      I: _RND_NUM_I),
+    (S: _RND_CHARNUM_N;  I: _RND_CHARNUM_I),
+    (S: _RND_LOWCHAR_N;  I: _RND_LOWCHAR_I),
+    (S: _RND_HIGHCHAR_N; I: _RND_HIGHCHAR_I),
+    (S: _SELECT_N;       I: _SELECT_I),
+    (S: _TOLOWER_N;      I: _TOLOWER_I),
+    (S: _TOUPPER_N;      I: _TOUPPER_I),
+    (S: _NEWLINE_N;      I: _NEWLINE_I),
+    (S: _TAB_N;          I: _TAB_I)
+  );
+begin
+  AddNames(N, A);
+  inherited FillOneMacroNames(A);
+end;
 
-  else if YesRegExpr(AInString, RND_CHARNUM_D_1)  then
-    AOut := rnd_str2_1(AInString, rnd_charnum, RND_CHARNUM_D_1)
+class procedure TMacroModuleBase.DestroyOneMacroNames;
+begin
+  FreeAndNil(MacroNamesBase);
+end;
 
-  else if YesRegExpr(AInString, RND_LOWCHAR_D_1)  then
-    AOut := rnd_str2_1(AInString, rnd_lowchar, RND_LOWCHAR_D_1)
-
-  else if YesRegExpr(AInString, RND_HIGHCHAR_D_1)  then
-    AOut := rnd_str2_1(AInString, rnd_highchar, RND_HIGHCHAR_D_1)
-
-  //-----------------------------
-  else if YesRegExpr(AInString, RND_CHAR_D_2)  then
-    AOut := rnd_str2_2(AInString, rnd_char, RND_CHAR_D_2)
-
-  else if YesRegExpr(AInString, RND_NUM_D_2)  then
-    AOut := rnd_str2_2(AInString, rnd_num, RND_NUM_D_2)
-
-  else if YesRegExpr(AInString, RND_CHARNUM_D_2)  then
-    AOut := rnd_str2_2(AInString, rnd_charnum, RND_CHARNUM_D_2)
-
-  else if YesRegExpr(AInString, RND_LOWCHAR_D_2)  then
-    AOut := rnd_str2_2(AInString, rnd_lowchar, RND_LOWCHAR_D_2)
-
-  else if YesRegExpr(AInString, RND_HIGHCHAR_D_2)  then
-    AOut := rnd_str2_2(AInString, rnd_highchar, RND_HIGHCHAR_D_2)
-  //------------------------
-  else if YesRegExpr(AInString, SELECT_)  then
-    AOut := rnd_select(AInString, SELECT_)
-
-//------------------------------------------------------------------------------
-// ������� �� ����� (����� \macros\)
-  else if FindMacroData(AInString, AOut) then
+procedure TMacroModuleBase.ReLoadMacros(const AMacrosDir: TFileName);
+var
+  fl: TStringList;
+  z: TFileName;
+  buf: AnsiString;
+  rl: TListRandomAStrings;
+begin
+  if AMacrosDir<>'' then
+    FMacroDir := AMacrosDir;  
+  //---
+  if (FMacroDir<>'') and DirectoryExists(FMacroDir) then
   begin
-    {�����}
-  end
-//------------------------------------------------------------------------------
-// �������������� ������� (������ �� ���������� param)
-  else if AParam<>nil then
-  begin
-    if G_CompareText(AInString,LOCALHOSTNAME_)=0 then
-        AOut := AParam.LocalHost
+    fl := TStringList.Create;
+    try
+      if FindInDir(FMacroDir, fl, [foFindFiles,foIncFullPath], '*.txt')>0 then
+      begin
+        FLock.BeginWrite;
+        try
+          FMacroFileList.Clear();
+          for z in fl do
+          begin
+            rl := nil;
+            buf := StringLoadFromFile(z);
+            if buf<>'' then
+            begin
+              rl := TListRandomAStrings.Create(TAnsiStringList.Create, True);
+              rl.List.Text := buf;
+            end;
+            FMacroFileList.Add(ChangeFileExt(ExtractFileName(z), ''), rl);
+          end;
+        finally
+          FLock.EndWrite
+        end;
+      end;
+    finally
+      fl.Free
+    end;
+  end;
+end;
 
-    else if G_CompareText(AInString,ACCOUNTDOMAIN_)=0 then
-      AOut := AParam.AccountDomain
-
-    else if G_CompareText(AInString,RECIPIENT_)=0 then
-      AOut := AParam.RecipientAddress
-
-    else if G_CompareText(AInString,SENDER_)=0 then
-      AOut := AParam.FromAddress
-
-    else if G_CompareText(AInString,ENCODE_)=0 then
-      AOut := AParam.CurEncode
-
-    else if G_CompareText(AInString,ENCODE_)=0 then
-      AOut := AParam.CurEncode
-
-    else if G_CompareText(AInString,MSGID_)=0 then
-      AOut := AParam.MessageID
-
-    else if G_CompareText(AInString,CID_)=0 then
-      AOut := AParam.CID
-
-    else if G_CompareText(AInString,BOUNDARY_)=0 then
-      AOut := AParam.Boundary
-
-    else if G_CompareText(AInString,BOUNDARY1_)=0 then
-      AOut := AParam.Boundary
-      
-    else if G_CompareText(AInString,BOUNDARY2_)=0 then
-      AOut := AParam.Boundary2
-
-    else if G_CompareText(AInString,DATE_)=0 then
-      AOut := AParam.Date
-
-    else if G_CompareText(AInString,HELO_)=0 then
-      AOut := AParam.Helo
-
-    else
+function TMacroModuleBase.FindMacro(const AName: AnsiString;
+  var AOut: AnsiString): Boolean;
+var
+  A: TListRandomAStrings;
+  k: Integer;
+begin
+  FLock.BeginRead;
+  try
+    k := FMacroFileList.IndexOf(AName);
+    if k<>-1 then
     begin
-     Result := False
-    end
+      A := FMacroFileList.ValueList[k];
+      if Assigned(A) then
+        AOut := A.Next()
+      else
+        AOut := '';
+      Result := True;
+      Exit;
+    end;
+  finally
+    FLock.EndRead
+  end;
+  Result := False;
+end;
+
+class function TMacroModuleBase.MacroRandomStr(const AChars,
+  AParam: AnsiString): AnsiString;
+var p,k1,k2: Integer;
+begin
+  p := G_CharPos('-', AParam);
+  if p=0 then
+  begin
+    k1 := StrToIntDef(AParam, 1);
+    k2 := -1;
   end
   else
   begin
-   Result := False
-  end
+    k1 := StrToIntDef(Copy(AParam,1,p-1), 1);
+    k2 := StrToIntDef(Copy(AParam,p+1,MaxInt), 1);
+  end;
+  Result := RandomChars(AChars, k1, k2)
 end;
 
-constructor TMacros.Create;
+class function TMacroModuleBase.MacroSelect0(const AParamStr: AnsiString;
+  AStart: Integer; var ANum: Integer): AnsiString;
+var
+  j, s, l, p: Integer;
 begin
-  FMacros := TStringAssociationList.Create(False);
-  FMacros.OwnValues := True;
-  FLockObj := TMultiReadExclusiveWriteSynchronizer.Create;
+  if ANum<1 then
+    ANum := Random(G_CountOfChar(AParamStr, '|') + 1) + 1;
+  s := AStart;
+  j := 1;
+  l := Length(AParamStr);
+  repeat
+    p := G_CharPos('|', AParamStr, s);
+    if p=0 then
+      p := l + 1;
+    if j=ANum then
+    begin
+      Result := Copy(AParamStr, s, p - s);
+      Exit;
+    end;
+    s := p + 1;
+    Inc(j);
+  until s>l;
+  // сюда попадать не должен
+  raise EMacroError.Create('_rnd_select error "'+AParamStr+'"');
+end;
+
+class function TMacroModuleBase.MacroSelect1(
+  const AParamStr: AnsiString): AnsiString;
+var k: Integer;
+begin
+  k := 0;
+  Result := MacroSelect0(AParamStr, 1, k)
+end;
+
+class function TMacroModuleBase.MacroSelect2(const AParamStr: AnsiString;
+  const ASelect2Array: TSelectVar): AnsiString;
+var
+  p,s,k: Integer;
+  z: AnsiString;
+begin
+  p := G_CharPos(';', AParamStr);
+  if p>0 then
+  begin
+    s := p + 1;
+    z := Trim(Copy(AParamStr, 1, p-1));
+    //---
+    k := ASelect2Array.IndexOf(z);
+    if k=-1 then
+      k := ASelect2Array.Add(z, Pointer(-1));
+    Result := MacroSelect0(AParamStr, s, Integer(ASelect2Array.ValueList[k]));
+  end
+  else
+  begin
+    s := 1;
+    k := 0;
+    Result := MacroSelect0(AParamStr, s, k);
+  end;
+end;
+
+class function TMacroModuleBase.MacroSetVar(const AParam: AnsiString;
+  const AArray: TTwoStrList): AnsiString;
+var
+  p: Integer;
+  ln,lv: AnsiString;
+begin
+  p := G_CharPos(';', AParam);
+  if p>0 then
+  begin
+    ln := Copy(AParam, 1, p-1);
+    lv := Copy(AParam, p+1, MaxInt);
+  end
+  else
+  begin
+    ln := AParam;
+    lv := '';
+  end;
+  AArray.Add(ln, lv, True);
+  Result := '';
+end;
+
+function TMacroModuleBase.ApplyNameMacro(ANameID: Integer;
+  const AParam: AnsiString; out AOut: AnsiString): Boolean;
+begin
+  case ANameID of
+    _RND_CHAR_I:
+      AOut := MacroRandomStr(gCharsEngStr, AParam);
+    _RND_NUM_I:
+      AOut := MacroRandomStr(gCharsNumStr, AParam);
+    _RND_CHARNUM_I:
+      AOut := MacroRandomStr(gCharsEngNumStr, AParam);
+    _RND_LOWCHAR_I:
+      AOut := MacroRandomStr(gCharsEngLowStr, AParam);
+    _RND_HIGHCHAR_I:
+      AOut := MacroRandomStr(gCharsEngHighStr, AParam);
+    _SELECT_I:
+      AOut := MacroSelect1(AParam);
+    _TOLOWER_I:
+      AOut := G_ToLower(AParam);
+    _TOUPPER_I:
+      AOut := G_ToUpper(AParam);
+    _NEWLINE_I:
+      AOut := CRLF;
+    _TAB_I:
+      AOut := #9;
+    else
+    begin
+      Result := False;
+      Exit;
+    end;
+  end;
+  Result := True;
+end;
+
+function TMacroModuleBase.ApplyMacro(const AName, AParam: AnsiString;
+  out AOut: AnsiString): Boolean;
+begin
+  Result := inherited ApplyMacro(AName, AParam, AOut);
+  if Result then
+    Exit;
+  //---
+  Result := FindMacro(AName, AOut);
+  if Result then
+    Exit;
+  //---
+  Result := False;
+end;
+
+
+
+{ TMacros }
+
+constructor TMacros.Create(const AMacrosDir: TFileName);
+begin
+  FModList := TArrayList.Create(3);
+  FModList.OwnItems := True;
+  //---
+  FModBase := TMacroModuleBase.Create(Self, AMacrosDir); // IfEmpty(AMacrosDir, gDirApp+'macros\')
+  //---
+  FModLocal := TMacroModuleLocalLocked.Create;
+  //---
+  Randomize();  
 end;
 
 destructor TMacros.Destroy;
 begin
-  FreeAndNil(FMacros);
-  FreeAndNil(FLockObj);
+  FreeAndNil(FModList);
+  FreeAndNil(FModLocal);
   inherited;
 end;
 
-function TMacros.FindMacroData(const AMacroName: AnsiString;
-  var AOutString: AnsiString): Boolean;
-var A: TMacroItem;
+function TMacros._ApplyMacros(const AInString: AnsiString;
+  ALocalMod: TMacroModuleLocal; out AOut: AnsiString): Boolean;
+var
+  ln,lp: AnsiString;
+  j: Integer;
 begin
-  Result := False;
-  FLockObj.BeginRead;
-  try
-    A := TMacroItem(FMacros.Items[AMacroName]);
-    if Assigned(A) then
+  AOut := '';
+  ParseMacro(AInString, ln, lp);
+  if ln='' then
+  begin
+    Result := False;
+    Exit;
+  end;
+  //---
+  for j:=0 to FModList.Count-1 do
+    if (TObject(FModList[j]) as TMacroModule).ApplyMacro(ln, lp, AOut) then
     begin
-      AOutString := A.MacroData;
       Result := True;
+      Exit;
     end;
-  finally
-    FLockObj.EndRead
+  //---
+  if Assigned(ALocalMod) then
+  begin
+    Result := ALocalMod.ApplyMacro(ln, lp, AOut);
+    if Result then
+      Exit;
   end;
+  //---
+  Result := False
 end;
 
-procedure TMacros.LoadMacros(const AMacroPath: AnsiString);
-var
-  j : Integer;
-  s,z: AnsiString;
-  sl : TStringList;
-  dir : AnsiString;
+procedure TMacros.AddModule(const A: TMacroModule);
 begin
-  dir := IncludeTrailingPathDelimiter(AMacroPath);
-  sl := TStringList.Create;
-  try
-    FindInDir(dir, sl, True, '*.txt');
-    FLockObj.BeginWrite;
-    try
-      FMacros.Clear;
-      for j:=0 to sl.Count-1 do
-      begin
-        z := sl[j];
-        s := ChangeFileExt(z, '');
-        FMacros.Add(
-          s,
-          TMacroItem.Create(z, dir+z)
-        );
-      end;
-    finally
-      FLockObj.EndWrite;
-    end;
-  finally
-    sl.Free;
-  end;
+  FModList.Add(A)
 end;
 
-function TMacros.YesMacro(const aStr: AnsiString; var s, l: Integer;
+(*
+class function TMacros.YesMacro(const aStr: AnsiString; var s, l: Integer;
   aStart: Integer): Boolean;
-//const
-//  ch = ['A'..'Z','a'..'z','0'..'9','_','-','.','[',']'];
-var
-  p1,p2: Integer;
+var p1,p2,i1,i2: Integer;
 begin
-  Result := False;
   p1 := G_CharPos('%', aStr, aStart);
   p2 := G_CharPos('%', aStr, p1+1);
   if (p1>0) and (p2>0) then
   begin
-    s := p1;
-    l := p2 - p1 + 1;
-    Result := True;
-  end
-{
-  Result := False;
-  p1 := G_CharPos('%', aStr, aStart);
-  p2 := G_CharPos('%', aStr, p1+1);
-  p3 := CharsPosNot(ch, aStr, p1+1);
-  if (p1>0) and (p2>0) and (p1<p2) and (p2<=p3) then
-  begin
-    s := p1;
-    l := p2 - p1 + 1;
-    Result := True;
-  end
-  else if (p2>0) and (p3>0) and (p2>p3) then
-  begin
-
+    i1 := p1 + 1;
+    i2 := p2 - 1;
+    if {((i2-1)>i1)} (i2>=i1) and (AStr[i1] in cMacroNameFirstChar) and (AStr[i2] in cMacroNameLastChar) then
+    begin
+      s := p1;
+      l := p2 - p1 + 1;
+      Result := True;
+      Exit;
+    end;
   end;
-}
+  Result := False;
 end;
 
-{$IFDEF USE_BUILT_MACROS}
-function ApplyMacros(const AText:AnsiString; AParam:TMacroParam=nil):AnsiString;
+
+class function TMacros.YesMacroNew(const AStr: AnsiString; var s, l: Integer;
+  AStart, AEnd: Integer): Boolean;
+var p1,p2,i1,i2: Integer;
 begin
-  Result := BuiltMacros.ApplyMacros(AText, AParam)
+  p2 := G_CharPos('$', AStr, AStart);
+  if (0<p2) and (p2<AEnd) then
+  begin
+    p1 := G_LastCharPos('^', AStr, p2);
+    if (AStart<=p1) and (p1<AEnd) then
+    begin
+      i1 := p1 + 1;
+      i2 := p2 - 1;
+      if ((i2-1)>i1) and (AStr[i1] in cMacroNameFirstChar) and (AStr[i2] in cMacroNameLastChar) then
+      begin
+        if CharsPos(cNotMacroChars, AStr, i1, i2)=0 then
+        begin
+          s := p1;
+          l := p2 - p1 + 1;
+          Result := True;
+          Exit;
+        end;
+      end;
+    end;
+  end;
+  Result := False;
+end;
+*)
+
+
+// Возврашает
+// s - начало с % или ^
+// l - длина включая % или $
+class function TMacros.YesMacroNew2(const AStr: AnsiString; out s, l: Integer;
+  AStart: Integer): Boolean;
+var p1,p2,p3,i1,i2: Integer;
+begin
+  s := Length(AStr);
+  p2 := G_CharPos('$', AStr, AStart);
+  p3 := G_CharPos('%', AStr, AStart);
+  if p2=0 then p2 := MaxInt;
+  if p3=0 then p3 := MaxInt;
+  if (p2<>MaxInt) or (p3<>MaxInt) then
+  begin
+    if p3<p2 then // %macro[]%
+    begin
+      p2 := G_CharPos('%', AStr, p3+1);
+      p1 := p3;
+    end
+    else // ^macro[]$
+    begin
+      p1 := G_LastCharPos('^', AStr, p2);
+    end;
+    s  := p2;
+    //---
+    if AStart<=p1 then
+    begin
+      i1 := p1 + 1;
+      i2 := p2 - 1;
+      if (i2>=i1) and (AStr[i1] in cMacroNameFirstChar) and (AStr[i2] in cMacroNameLastChar) then
+      begin
+        if CharsPos(cNotMacroChars, AStr, i1, i2)=0 then
+        begin
+          s := p1;
+          l := p2 - p1 + 1;
+          Result := True;
+          Exit;
+        end;
+      end;
+    end;
+  end;
+  Result := False;
 end;
 
-procedure MacrosReload;
+class procedure TMacros.ParseMacro(const AText: AnsiString;
+  var AMacroName, AMacroParam: AnsiString);
+var p1,len: Integer;
 begin
-  BuiltMacros.LoadMacros(gDirApp+'macros\');
+  AMacroName := '';
+  AMacroParam := '';
+  p1 := G_CharPos('[', AText);
+  if p1>0 then
+  begin
+    len := Length(AText);
+    if AText[len]=']' then
+    begin
+      AMacroName := Copy(AText, 1, p1-1);
+      AMacroParam := Copy(AText, p1+1, len-p1-1);
+    end
+  end
+  else
+  begin
+    AMacroName := AText;
+  end;
+end;
+
+procedure TMacros.ReLoadMacros(const AMacrosDir: TFileName);
+begin
+  with FModBase as TMacroModuleBase do begin
+    ReLoadMacros(AMacrosDir);
+  end;
+end;
+
+function TMacros.ApplyMacros(const AText: AnsiString;
+  ALocalMod: TMacroModuleLocal): AnsiString;
+const
+  MAX_RECURSION_COUNT = 1000;
+var
+  k,s,l,n : Integer;
+  z : AnsiString;
+  lModLol: TMacroModuleLocal;
+begin
+  Result := AText;
+  if Length(AText)<3 then
+    Exit;
+  //---
+  lModLol := TMacroModuleLocal(IfElse(Assigned(ALocalMod), ALocalMod, FModLocal));
+  //---
+  k := 0;
+  n := 1;
+  while n < Length(Result) do
+  begin
+    if YesMacroNew2(Result, s, l, n) then
+      if _ApplyMacros(Copy(Result,s+1,l-2), lModLol, z) then
+        MyStuffString(Result, s, l, z)
+      else
+        n := s + l - 1
+    else
+      n := s + 1;
+    //---------------------------------
+    Inc(k);
+    if k>MAX_RECURSION_COUNT then
+      raise EMacroError.Create('Recursion in Macros');
+  end;
+end;
+
+function TMacros._Dump: UTF8String;
+var
+  R: TStringBuilder;
+begin
+
+  R := TStringBuilder.Create;
+  try
+    //---
+    Result := RawByteString(R.ToString())
+  finally
+    R.Free;
+  end;
 end;
 
 initialization
-  BuiltMacros := TMacros.Create;
-  MacrosReload;
+  TMacroModuleLocalLocked.InitMacroNames();
+  TMacroModuleBase.InitMacroNames();
 
 finalization
- {$IFDEF DEBUG}
-  BuiltMacros.Free;
- {$ENDIF}
- 
-{$ENDIF}
+  {$IFDEF DEBUG}
+    TMacroModuleBase.DestroyOneMacroNames();
+    TMacroModuleLocalLocked.DestroyOneMacroNames();
+  {$ENDIF}
 
 end.
+
+
